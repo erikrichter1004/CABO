@@ -14,13 +14,15 @@ Installierbare statische Web-App auf GitHub Pages. Kommunikation der Spieler üb
 - Individuelle Kartenhäufigkeiten (Fallback auf skalierte Verteilung)
 
 ## Noch nicht zuverlässig abgeschlossen
-- Vollständiger Hostwechsel bei Abbruch oder freiwilliger Übergabe
-- Server-unabhängige Wiederherstellung nach Hostverlust
+- **Automatischer Hostwechsel bei unerwartetem Hostabsturz:** noch nicht umgesetzt. Freiwillige Übergabe mit Bestätigung und vollständiger Spielzustandsübertragung an den Nachfolger ist implementiert, aber noch nicht auf mehreren Geräten getestet.
+- Wiederherstellung des vollständigen geheimen Kartenzustands ohne zuvor bestätigte Gastgeberübergabe
 - Korrekte Geheimhaltung/Bestätigung aller Spezialfälle, Animationen und alle Timer-Unterbrechungen
 - Alle Sonderfälle der 61 vereinbarten Regeln, insbesondere Ready-/Peek-Hostentscheidungen, Sonderwertungen und Einstellungsvalidierung
 - Vollständige Tests mit mehreren Geräten und Tests für jede Spielregel
 
-**Nicht als fertiges Spiel behandeln.** JavaScript-Syntax wird per GitHub Actions geprüft; ein erfolgreicher Syntaxcheck ist kein funktionaler Multiplayer- oder Regeltest.
+**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 75 automatisierte Regeltests bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
+
+Detaillierter Fortschritt: [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Veröffentlichung
 GitHub Settings → Pages → Deploy from a branch → main → /(root).
