@@ -114,6 +114,23 @@ function createRoom(n,resume=false,fromHandoff=false){
   note("Spielserververbindung fehlgeschlagen: "+e.type);
  });
 }
+function promoteHandoff(snapshot){
+ if(!snapshot||snapshot.room!==room||!snapshot.state||!snapshot.state.players?.some(p=>p.id===identity)){
+  note("Gastgeberwechsel fehlgeschlagen. Verbindung wird wiederhergestellt.");return false;
+ }
+ const saved=structuredClone(snapshot),previousHost=saved.state.host;
+ saved.state.host=identity;
+ const previous=saved.state.players.find(p=>p.id===previousHost);
+ if(previous){previous.connected=false;previous.paused=true;previous.disconnectedAt=Date.now()}
+ sessionStorage.setItem("caboHostSnapshot",JSON.stringify(saved));
+ createRoom(sessionStorage.getItem("caboName")||"Gastgeber",true,true);
+ if(state.stage==="playing"&&state.players[state.turn]?.id===previousHost){
+  settlePendingDraw(previousHost);nextTurn(true);
+ }
+ if(state.stage==="peeking"||state.stage==="reveal")advanceWaitingPhase();
+ note("Gastgeberwechsel übernommen.");
+ return true;
+}
 function scheduleReconnect(n,c,epoch){
  if(intentionalClose||epoch!==netEpoch||reconnectTimer)return;
  reconnectAttempts++;
@@ -138,14 +155,23 @@ function joinRoom(n,c){
   });
   conn.on("data",msg=>{
    if(epoch!==netEpoch)return;
+   if(msg?.type==="handoff"){
+    if(msg.snapshot?.room===c&&msg.snapshot.state?.players?.some(p=>p.id===identity)){
+     pendingHandoff=msg.snapshot;
+     conn.send({type:"handoffAck"});
+     note("Gastgeberwechsel bestätigt. Übernahme nach Verbindungsfreigabe.");
+    }
+    return;
+   }
    if(msg?.type==="state"){
+    reconnectAttempts=0;
     if(state&&Number(msg.state.revision||0)<Number(state.revision||0))return;
     state=msg.state;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;
     abilityView=msg.privateAbility||null;setPhase("game");
    }
    if(msg?.type==="error")note(msg.message);
   });
-  conn.on("close",()=>scheduleReconnect(n,c,epoch));
+  conn.on("close",()=>{if(epoch!==netEpoch)return;if(pendingHandoff){const backup=pendingHandoff;pendingHandoff=null;promoteHandoff(backup)}else scheduleReconnect(n,c,epoch)});
   conn.on("error",()=>scheduleReconnect(n,c,epoch));
  });
  peer.on("error",()=>scheduleReconnect(n,c,epoch));
@@ -153,6 +179,10 @@ function joinRoom(n,c){
 }
 function receive(conn,msg){
  if(!msg||typeof msg!=="object"||!state)return;
+ if(msg.type==="handoffAck"&&handoffTarget&&conn.playerId===handoffTarget&&connections.get(conn.playerId)===conn){
+  note("Gastgeberrechte wurden bestätigt.");
+  home();return;
+ }
  if(msg.type==="hello"){
   const playerId=msg.id,token=msg.token;
   const deny=message=>{conn.send({type:"error",message});conn.close()};
@@ -178,7 +208,7 @@ function receive(conn,msg){
  }
  if(msg.type==="action"&&conn.playerId&&connections.get(conn.playerId)===conn)apply(conn.playerId,msg.action);
 }
-function sendAction(action){if(isHost)apply(identity,action);else if(hostConn?.open)hostConn.send({type:"action",action});else note("Keine Verbindung zum Gastgeber.")}
+function sendAction(action){if(isHost&&peer?.open)apply(identity,action);else if(isHost)note("Gastgeber ist noch nicht mit dem Raum verbunden.");else if(hostConn?.open)hostConn.send({type:"action",action});else note("Keine Verbindung zum Gastgeber.")}
 function privateState(id){const copy=structuredClone(state);for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
 function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets}))}catch{}for(const [id,c] of connections)if(c.open)c.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null});const own=privateState(identity);stateView=own;renderHost()}
 let stateView=null,pending={},privatePeeks={},abilities={},abilityView=null;
