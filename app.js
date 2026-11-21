@@ -21,12 +21,13 @@ let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0
 let resumeSecret=gameStore.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={},handoffTarget=null,pendingHandoff=null,handoffTimeout=null;
 gameStore.setItem("caboResumeSecret",resumeSecret);
 let actionSequence=Number(gameStore.getItem("caboActionSequence")||0);
+let standbySnapshot=null,hostLastSeenAt=0,lastPingAt=0,failoverAttempted=false;
 const clean=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function note(msg){const n=$("notice");n.textContent=msg;n.classList.add("show");clearTimeout(note.t);note.t=setTimeout(()=>n.classList.remove("show"),6000)}
 function setPhase(p){phase=p;render()}
 function home(){
  intentionalClose=true;hostResumeRetries=0;if(handoffTimeout){clearTimeout(handoffTimeout);handoffTimeout=null}
- handoffTarget=null;pendingHandoff=null;
+ handoffTarget=null;pendingHandoff=null;standbySnapshot=null;failoverAttempted=false;
  gameStore.removeItem("caboHostSnapshot");closeNet();state=null;room="";
  gameStore.removeItem("caboRoom");setPhase("home");
 }
@@ -44,7 +45,7 @@ function leaveRoom(){
 function closeNet(){
  netEpoch++;if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}
  try{hostConn?.close();for(const c of connections.values())c.close();peer?.destroy()}catch{}
- hostConn=null;connections.clear();peer=null;isHost=false;
+ hostConn=null;connections.clear();peer=null;isHost=false;hostLastSeenAt=0;lastPingAt=0;
 }
 function nameField(){return '<label>Dein Spielername<input id="playerName" maxlength="24" value="'+clean(gameStore.getItem("caboName")||"")+'" placeholder="Name"></label>'}
 function takeName(){const n=$("playerName")?.value.trim();if(!n){note("Bitte Namen eingeben.");return null}gameStore.setItem("caboName",n);return n}
@@ -93,6 +94,28 @@ if($("closePeek"))$("closePeek").onclick=()=>{peek=null;render()};
 function bindCommon(){document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{if(confirm("Spieler dauerhaft entfernen?"))sendAction({type:"remove",id:b.dataset.remove})});document.querySelectorAll("[data-pause]").forEach(b=>b.onclick=()=>sendAction({type:"pause",id:b.dataset.pause}));if($("leave"))$("leave").onclick=leaveRoom}
 function newState(n){return {host:identity,players:[{id:identity,name:n,score:0,hand:[],paused:false,rescued:false,connected:true}],settings:{...opts},started:false,stage:"lobby",round:0,turn:0,deck:[],discard:[],cabo:null,lastTurns:0,turnStart:Date.now(),starter:0}}
 function peerId(c){return "cabo-online-v1-"+c}
+function chooseStandby(){
+ if(!state||!isHost)return null;
+ return state.players.find(p=>p.id!==state.host&&!p.paused&&p.connected!==false&&connections.get(p.id)?.open)?.id||null;
+}
+function authoritativeSnapshot(){
+ return {room,state:structuredClone(state),pending:structuredClone(pending),privatePeeks:structuredClone(privatePeeks),abilities:structuredClone(abilities),secrets:structuredClone(playerSecrets),savedAt:Date.now()};
+}
+function shouldAutoPromote(snapshot){
+ if(!snapshot||snapshot.room!==room||snapshot.state?.host===identity||!state)return false;
+ const expected=snapshot.state.players?.find(p=>p.id!==snapshot.state.host&&!p.paused&&p.connected!==false);
+ return expected?.id===identity && snapshot.state.revision>=state.revision &&
+        snapshot.state.players.some(p=>p.id===identity);
+}
+function recoverAfterHostLoss(n,c,epoch){
+ if(epoch!==netEpoch||intentionalClose)return;
+ if(standbySnapshot&&shouldAutoPromote(standbySnapshot)&&!failoverAttempted){
+  const snapshot=standbySnapshot;standbySnapshot=null;failoverAttempted=true;
+  note("Gastgeberverbindung verloren. Automatische Übernahme läuft.");
+  promoteHandoff(snapshot);return;
+ }
+ scheduleReconnect(n,c,epoch);
+}
 function createRoom(n,resume=false,fromHandoff=false){
  intentionalClose=true;closeNet();intentionalClose=false;isHost=true;handoffTarget=null;
  const snapshot=resume?gameStore.getItem("caboHostSnapshot"):null;
@@ -111,6 +134,7 @@ function createRoom(n,resume=false,fromHandoff=false){
    for(const ability of Object.values(abilities))if(ability?.started)ability.started+=downtime;
    for(const player of state.players)if(player.id!==identity){player.connected=false;player.disconnectedAt=Date.now()}
    if(state.stage==="playing"&&state.players[state.turn]?.id!==identity)state.connectionPauseAt=Date.now();
+   gameStore.setItem("caboHostSnapshot",JSON.stringify({...saved,state,savedAt:Date.now()}));
   }catch{
    note("Der gespeicherte Gastgeber-Spielstand ist unvollständig. Er wurde nicht überschrieben.");
    closeNet();state=null;setPhase("home");return;
@@ -185,6 +209,7 @@ function scheduleReconnect(n,c,epoch){
 }
 function joinRoom(n,c){
  intentionalClose=true;closeNet();intentionalClose=false;
+ standbySnapshot=null;failoverAttempted=false;hostLastSeenAt=Date.now();lastPingAt=Date.now();
  const epoch=netEpoch;
  room=c;gameStore.setItem("caboRoom",c);gameStore.setItem("caboName",String(n||"Gast").slice(0,24));isHost=false;setPhase("connecting");
  peer=new Peer();
@@ -197,6 +222,13 @@ function joinRoom(n,c){
   });
   conn.on("data",msg=>{
    if(epoch!==netEpoch)return;
+   if(msg?.type==="pong"){hostLastSeenAt=Date.now();return}
+   if(msg?.type==="standby"){
+    if(msg.snapshot?.room===c&&msg.snapshot?.state?.host===state?.host&&msg.snapshot?.state?.players?.some(p=>p.id===identity)&&Number(msg.snapshot.state.revision)>=Number(state?.revision||0)){
+     standbySnapshot=msg.snapshot;
+    }
+    return;
+   }
    if(msg?.type==="handoff"){
     if(msg.snapshot?.room===c&&msg.snapshot.state?.players?.some(p=>p.id===identity)){
      pendingHandoff=msg.snapshot;
@@ -206,7 +238,7 @@ function joinRoom(n,c){
     return;
    }
    if(msg?.type==="state"){
-    reconnectAttempts=0;
+    hostLastSeenAt=Date.now();reconnectAttempts=0;
     if(state&&Number(msg.state.revision||0)<Number(state.revision||0))return;
     state=msg.state;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;
     abilityView=msg.privateAbility||null;setPhase("game");
@@ -216,11 +248,11 @@ function joinRoom(n,c){
     intentionalClose=true;closeNet();state=null;setPhase("join");
    }
   });
-  conn.on("close",()=>{if(epoch!==netEpoch)return;if(pendingHandoff){const backup=pendingHandoff;pendingHandoff=null;promoteHandoff(backup)}else scheduleReconnect(n,c,epoch)});
-  conn.on("error",()=>scheduleReconnect(n,c,epoch));
+  conn.on("close",()=>{if(epoch!==netEpoch)return;if(pendingHandoff){const backup=pendingHandoff;pendingHandoff=null;promoteHandoff(backup)}else recoverAfterHostLoss(n,c,epoch)});
+  conn.on("error",()=>recoverAfterHostLoss(n,c,epoch));
  });
- peer.on("error",()=>scheduleReconnect(n,c,epoch));
- peer.on("disconnected",()=>{if(!hostConn?.open)scheduleReconnect(n,c,epoch)});
+ peer.on("error",()=>recoverAfterHostLoss(n,c,epoch));
+ peer.on("disconnected",()=>{if(!hostConn?.open)recoverAfterHostLoss(n,c,epoch)});
 }
 function receive(conn,msg){
  if(!msg||typeof msg!=="object"||!state)return;
@@ -252,6 +284,9 @@ function receive(conn,msg){
   }
   broadcast();return;
  }
+ if(msg.type==="ping"&&conn.playerId&&connections.get(conn.playerId)===conn){
+  if(conn.open)conn.send({type:"pong"});return;
+ }
  if(msg.type==="action"&&conn.playerId&&connections.get(conn.playerId)===conn){
   const id=conn.playerId,revision=Number(msg.revision),seq=Number(msg.sequence);
   if(!Number.isInteger(revision)||revision!==(state.revision||0)||!Number.isSafeInteger(seq)||seq<=0||seq<=(state.lastClientSeq?.[id]||0)){
@@ -274,7 +309,18 @@ function sendAction(action){
 }
 function privateState(id){const copy=structuredClone(state);delete copy.lastClientSeq;for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
 function sendStateTo(id,conn){if(conn?.open)conn.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null})}
-function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{gameStore.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets,savedAt:Date.now()}))}catch{}for(const [id,c] of connections)sendStateTo(id,c);const own=privateState(identity);stateView=own;renderHost()}
+function broadcast(){
+ if(!isHost||!state)return;
+ state.standby=chooseStandby();
+ state.revision=(state.revision||0)+1;
+ const snapshot=authoritativeSnapshot();
+ try{gameStore.setItem("caboHostSnapshot",JSON.stringify(snapshot))}catch{}
+ for(const [id,c] of connections){
+  sendStateTo(id,c);
+  if(id===state.standby&&c.open)c.send({type:"standby",snapshot});
+ }
+ const own=privateState(identity);stateView=own;renderHost();
+}
 let stateView=null,pending={},privatePeeks={},abilities={},abilityView=null;
 function renderHost(){const full=state;state=stateView;drawn=pending[identity]||null;peek=privatePeeks[identity]||null;abilityView=abilities[identity]||null;render();state=full}
 function validateSettings(settings,playerCount=2){
@@ -464,6 +510,13 @@ broadcast()}
 function tick(){
  if(!state||(isHost&&handoffTarget))return;
  const now=Date.now();
+ if(!isHost&&phase==="game"&&hostConn?.open){
+  if(now-lastPingAt>=6000){lastPingAt=now;hostConn.send({type:"ping"})}
+  if(hostLastSeenAt&&now-hostLastSeenAt>=20000){
+   note("Gastgeber antwortet nicht mehr. Wiederverbindung oder Übernahme wird versucht.");
+   hostConn.close();return;
+  }
+ }
  if(state.stage==="peeking"||state.stage==="reveal"){
   const peeking=state.stage==="peeking";
   const started=peeking?state.peekStart:state.readyStart;
