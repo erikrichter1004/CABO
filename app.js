@@ -150,7 +150,6 @@ function joinRoom(n,c){
   const conn=peer.connect(peerId(c),{reliable:true});hostConn=conn;
   conn.on("open",()=>{
    if(epoch!==netEpoch)return;
-   reconnectAttempts=0;
    conn.send({type:"hello",id:identity,name:n,token:resumeSecret});
   });
   conn.on("data",msg=>{
@@ -169,13 +168,16 @@ function joinRoom(n,c){
     state=msg.state;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;
     abilityView=msg.privateAbility||null;setPhase("game");
    }
-   if(msg?.type==="error")note(msg.message);
+   if(msg?.type==="error"){
+    note(msg.message||"Beitritt wurde vom Gastgeber abgelehnt.");
+    intentionalClose=true;closeNet();state=null;setPhase("join");
+   }
   });
   conn.on("close",()=>{if(epoch!==netEpoch)return;if(pendingHandoff){const backup=pendingHandoff;pendingHandoff=null;promoteHandoff(backup)}else scheduleReconnect(n,c,epoch)});
   conn.on("error",()=>scheduleReconnect(n,c,epoch));
  });
  peer.on("error",()=>scheduleReconnect(n,c,epoch));
- peer.on("disconnected",()=>scheduleReconnect(n,c,epoch));
+ peer.on("disconnected",()=>{if(!hostConn?.open)scheduleReconnect(n,c,epoch)});
 }
 function receive(conn,msg){
  if(!msg||typeof msg!=="object"||!state)return;
@@ -202,7 +204,8 @@ function receive(conn,msg){
   const joined=state.players.find(p=>p.id===playerId);
   joined.connected=true;joined.disconnectedAt=null;
   if(state.stage==="playing"&&state.players[state.turn]?.id===playerId&&state.connectionPauseAt){
-   state.turnStart+=Date.now()-state.connectionPauseAt;state.connectionPauseAt=null;
+   if(state.abilityActive!==playerId)state.turnStart+=Date.now()-state.connectionPauseAt;
+   state.connectionPauseAt=null;
   }
   broadcast();return;
  }
