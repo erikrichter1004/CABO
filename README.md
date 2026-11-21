@@ -19,7 +19,7 @@ Installierbare statische Web-App auf GitHub Pages. Kommunikation der Spieler üb
 - Abschließende Prüfung sämtlicher Regel-/Unterbrechungsfälle und der Verbindungsqualität in echten Browsern und auf mehreren Geräten
 - PWA-Installationsprüfung auf iOS/Android; das visuelle Design und die Animationen folgen erst nach Abschluss der Funktionen
 
-**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 86 automatisierte Regel-/Stresstests und eine PeerJS-Mehrclient-Simulation bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
+**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 96 automatisierte Regel-/Stresstests und eine PeerJS-Mehrclient-Simulation bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
 
 Detaillierter Fortschritt: [DEVELOPMENT.md](DEVELOPMENT.md).
 
