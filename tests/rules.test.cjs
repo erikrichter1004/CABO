@@ -5,7 +5,7 @@ const storage=new Map();
 const ctx={console,Date,Math,JSON,structuredClone,crypto:{randomUUID:()=>"host"},document:{querySelectorAll:()=>[],getElementById:id=>id==="app"?app:{textContent:"",classList:{add(){},remove(){}},style:{}}},sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},setInterval(){},setTimeout(){},clearTimeout(){},confirm:()=>true};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync("app.js","utf8"),ctx);
-function check(title,code){try{vm.runInContext(code,ctx);console.log("PASS",title)}catch(e){console.error("FAIL",title,e);process.exitCode=1}}
+function check(title,code){try{vm.runInContext('(function(){'+code+'})()',ctx);console.log("PASS",title)}catch(e){console.error("FAIL",title,e);process.exitCode=1}}
 const base=(a,b,c)=>({host:"host",players:[{id:"host",name:"A",score:0,hand:a.map(v=>({v,up:false})),rescued:false},{id:"b",name:"B",score:0,hand:b.map(v=>({v,up:false})),rescued:false},{id:"c",name:"C",score:0,hand:c.map(v=>({v,up:false})),rescued:false}],settings:{kamikaze:false,exactRescue:true,endMode:"rounds",roundLimit:99,limit:100},stage:"playing",round:1,cabo:"host",ready:[],turn:0,deck:[],discard:[]});
 ctx.make=base;
 check("CABO sole lowest scores zero",`state=make([2,3],[4,5],[6,7]);scoreRound();if(state.players.map(p=>p.score).join(",")!=="0,9,13")throw Error("sole lowest")`);
