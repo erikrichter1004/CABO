@@ -19,12 +19,14 @@
 | 5 | Echtzeit-Multiplayer | ✅ Bereichslogik abgeschlossen | Ereignisbasiertes Host-Snapshot, private Kartendaten, Authentifizierung und Replay-Schutz, Zustand je Revision; drei simulierte Clients mit echten Ereignisnachrichten geprüft, praktische Gerätetests in Schritt 9 |
 | 6 | Gastgeberverwaltung | ✅ Bereichslogik abgeschlossen | Pausieren/Entfernen, freiwillige Übergabe, automatische Nachfolgerwahl mit 20-s-Erreichbarkeitskontrolle, Übernahme bei Absturz auch ohne Rückkehr, Sitzungswiederherstellung; 2-/3-Spieler-, Wechsel- und Peer-ID-Belegungstests bestanden; echte Geräteprüfung folgt in Schritt 9 |
 | 7 | Runden- und Zeitsteuerung | ✅ Bereichslogik abgeschlossen | 60-s-Erinnerung, Gastgeberfreigabe ab 90 s, Ready- und Peek-Gates, Überfällige Spezialfähigkeit beenden, Zugtimer und Offline-Pause |
-| 8 | Vollständige Regeltests | 🟡 In Arbeit | **84 automatische Regel-/Stresstests** plus Mehrclient-Simulationen in GitHub Actions; weitere Grenzfälle und Tests unter echten Browsern fehlen |
+| 8 | Vollständige Regeltests | ✅ Automatisierte Tests abgeschlossen | **96 automatische Regel- und Belastungstests**, 2–8-Spieler-Stresstests und isolierte Mehrclient-Simulationen in GitHub Actions erfolgreich; echte Browser-/Gerätetests folgen unter Bereich 9 |
 | 9 | Integration & Stabilität | 🟡 In Arbeit | Simulierte Drei-Spieler-Partie mit privaten Karten, Wiederbeitritt, Raumübergabe und Snapshot-Schutz sowie Host-Wiederherstellung aus Session-Snapshot getestet; echte Browser-/Mehrgerätetests und PWA-Prüfung stehen aus |
 
 ## Letzter abgeschlossener Implementierungsblock
 
-**Automatischer Gastgeberwechsel (Schritt 1 von 4): abgeschlossen als implementierte und automatisiert geprüfte Funktion.** Die weiteren 3 Pakete sind Belastungstests, durchgehende Proberunden und Geräte-/Browser-Prüfung.
+**Arbeitsplan (2 von 4 Paketen abgeschlossen):** Paket 1 – automatische Gastgeber-Ausfallsicherung ✅. Paket 2 – zusätzliche Regel- und Belastungstests ✅. Paket 3 – vollständige simulierte Spielrunden ⬜. Paket 4 – abschließende Browser-/Geräteprüfung ⬜.
+
+**Zusatzprüfung in Paket 2:** Zehn neue Grenzfalltests für Mehrfachtausch aus offenem und verdecktem Stapel, Strafvarianten, leere Hände, ungültige Aktionen sowie genügend Karten für Stichrunden. Fehler beim misslungenen Mehrfachtausch aus der offenen Ablage behoben: Pflicht zum Kartentausch bleibt gewahrt. Benutzerdefinierte Kartenhäufigkeiten müssen nun auch potenzielle Stichrunden mit vier Karten je Spieler ermöglichen.
 
 - Fähigkeiten 7–12 über ein einheitliches Zustandsmodell inklusive spezieller Timerpause, optionaler/pflichtiger Aktionen und erweiterter Mehrfachkartenaktionen vereinheitlicht.
 - Anfangsblick bleibt offen, bis die Karte ausdrücklich geschlossen wird; andere Spieler bekommen keine Zielkarten-Indizes.
@@ -36,11 +38,11 @@
 
 ## Nächster konkreter Schritt
 
-**Bereiche 8 und 9:** Weitere Regel- und Stresstests, echte Browser-/Geräte-Multiplayer-Tests und Prüfung der PWA-Installation. Die Logik des automatischen Gastgeberwechsels ist bereits in Simulationsläufen geprüft.
+**Paket 3 von 4 – vollständige simulierte Spielrunden:** Mehrere komplette Spiele bis zum Ende durchspielen, einschließlich CABO-Wertung, Sonderfähigkeiten, Ready-Phasen, Stichrunde, Wechsel der Kartenstapel und synchronisierten Ergebnissen. Danach Paket 4 – reale Browser-/Geräte- und PWA-Tests.
 
 ### Zusätzliche Prüfnachweise
 
-- 84 automatische Regel- und Stresstests, einschließlich 2–8 Spielenden und konsistentem Kartenbestand.
+- 96 automatische Regel- und Stresstests, einschließlich 2–8 Spielenden und konsistentem Kartenbestand.
 - Drei vollständig getrennte simulierte Browser-Clients tauschen echte simulierte Datenkanal-Nachrichten aus: Zugwechsel, private Karten, Anfangsblick, Wiederverbindung, freiwilliger Hostwechsel.
 - Überraschender Hostausfall **mit anschließender Wiederherstellung durch den ursprünglichen Gastgeber** getestet: dieselbe Raumkennung, kurzzeitig blockierte Peer-ID, gefrorene Zugzeit und erneuter Beitritt der Mitspieler.
 - Lokale Wiederherstellung über dauerhaft gespeicherte Raumkennung, Spieleridentität und private Sitzungsschlüssel. Der Gastgeber speichert zusätzlich den vollständigen letzten Spielzustand im Browser; sofern dauerhafter Speicher blockiert wird, bleibt der Sitzungs-Speicher als Fallback.
