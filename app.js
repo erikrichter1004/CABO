@@ -105,6 +105,7 @@ function createRoom(n,resume=false,fromHandoff=false){
   playerSecrets={};pending={};privatePeeks={};abilities={};
  }
  playerSecrets[identity]=resumeSecret;
+ sessionStorage.setItem("caboName",String(n||"Gastgeber").slice(0,24));
  sessionStorage.setItem("caboRoom",room);setPhase("connecting");
  const epoch=netEpoch;
  peer=new Peer(peerId(room));
@@ -170,7 +171,7 @@ function scheduleReconnect(n,c,epoch){
 function joinRoom(n,c){
  intentionalClose=true;closeNet();intentionalClose=false;
  const epoch=netEpoch;
- room=c;sessionStorage.setItem("caboRoom",c);isHost=false;setPhase("connecting");
+ room=c;sessionStorage.setItem("caboRoom",c);sessionStorage.setItem("caboName",String(n||"Gast").slice(0,24));isHost=false;setPhase("connecting");
  peer=new Peer();
  peer.on("open",()=>{
   if(epoch!==netEpoch)return;
