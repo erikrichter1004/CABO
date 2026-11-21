@@ -1,9 +1,19 @@
 {
   "name": "CABO Online",
   "short_name": "CABO",
+  "id": "./",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "description": "CABO – gemeinsames Online-Kartenspiel",
   "background_color": "#0b1829",
   "theme_color": "#122439",
-  "icons": []
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
