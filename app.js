@@ -72,10 +72,23 @@ function createRoom(n,resume=false,fromHandoff=false){
  const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;
  if(snapshot){
   try{
-   const saved=JSON.parse(snapshot);room=saved.room;state=saved.state;
+   const saved=JSON.parse(snapshot);
+   if(!/^[0-9]{4}$/.test(saved.room)||saved.state?.host!==identity||!saved.state.players?.some(p=>p.id===identity))throw Error("invalid snapshot");
+   room=saved.room;state=saved.state;
    pending=saved.pending||{};privatePeeks=saved.privatePeeks||{};
    abilities=saved.abilities||{};playerSecrets=saved.secrets||{};
-  }catch{room=String(Math.floor(1000+Math.random()*9000));state=newState(n);playerSecrets={}}
+   const downtime=Math.max(0,Math.min(Date.now()-(Number(saved.savedAt)||Date.now()),86400000));
+   if(state.turnStart)state.turnStart+=downtime;
+   if(state.readyStart)state.readyStart+=downtime;
+   if(state.peekStart)state.peekStart+=downtime;
+   if(state.abilityPauseAt)state.abilityPauseAt+=downtime;
+   for(const ability of Object.values(abilities))if(ability?.started)ability.started+=downtime;
+   for(const player of state.players)if(player.id!==identity){player.connected=false;player.disconnectedAt=Date.now()}
+   if(state.stage==="playing"&&state.players[state.turn]?.id!==identity)state.connectionPauseAt=Date.now();
+  }catch{
+   note("Der gespeicherte Gastgeber-Spielstand ist unvollständig. Er wurde nicht überschrieben.");
+   closeNet();state=null;setPhase("home");return;
+  }
  }else{
   room=String(Math.floor(1000+Math.random()*9000));state=newState(n);
   playerSecrets={};pending={};privatePeeks={};abilities={};
@@ -84,7 +97,7 @@ function createRoom(n,resume=false,fromHandoff=false){
  sessionStorage.setItem("caboRoom",room);setPhase("connecting");
  const epoch=netEpoch;
  peer=new Peer(peerId(room));
- peer.on("open",()=>{if(epoch!==netEpoch)return;setPhase("game");broadcast()});
+ peer.on("open",()=>{if(epoch!==netEpoch)return;hostResumeRetries=0;setPhase("game");broadcast()});
  peer.on("connection",conn=>{
   if(epoch!==netEpoch){conn.close();return}
   conn.on("data",msg=>{if(epoch===netEpoch)receive(conn,msg)});
