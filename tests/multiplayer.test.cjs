@@ -351,7 +351,7 @@ async function heartbeatFailoverScenario(){
 }
 
 async function completeGameScenario(){
- const a=client("game-host-a-identity-0016"),b=client("game-guest-b-identity-0017"),c=client("game-guest-c-identity-0018");
+ const a=client("game-host-a-identity-0016",null,121212),b=client("game-guest-b-identity-0017"),c=client("game-guest-c-identity-0018");
  a.evaluate('opts={...defaults,endMode:"rounds",roundLimit:3,cards:4,peeks:2,turnsAfterCabo:1,abilityMode:"classic",abilityMandatory:false}');
  a.evaluate("createRoom('A')");await settle();
  const room=a.evaluate("room");
@@ -410,11 +410,10 @@ async function completeGameScenario(){
   }
  }
  assert.equal(totalTurns,9);
- let last=a.view();
- if(last.tiebreak){
-  // In a tied finish, the next phase is deliberately left for the dedicated tiebreak test.
-  assert.equal(last.stage,"reveal");
- }else assert.equal(last.stage,"finished");
+ const last=a.view();
+ assert.equal(last.stage,"finished","three-round game must reach a winner");
+ assert.ok(last.players.some(p=>p.id===last.winner));
+ assert.equal(participants.every(p=>p.view().winner===last.winner),true);
  console.log("PASS complete three-round, three-client game covers starting peeks, CABO, final turns, scoring and ready transitions");
 }
 async function completeTiebreakScenario(){
