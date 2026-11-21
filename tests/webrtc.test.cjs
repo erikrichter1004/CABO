@@ -89,6 +89,8 @@ async function exercise(hostEngine,guestEngine,name){
    }
    await p.locator("#donePeek").click();
   }
+  await a.locator("#deck").waitFor({timeout:15000});
+  await b.locator("#deck").waitFor({timeout:15000});
   for(const page of [a,b]){
    assert.equal(await page.locator(".table-rival").count(),1);
    assert.equal(await page.locator(".table-own-hand .table-card").count(),4);
