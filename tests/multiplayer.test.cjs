@@ -47,13 +47,18 @@ class SimPeer {
   for(const conn of this.connections)conn.close();
  }
 }
-function client(identity,existingStorage=null){
+function client(identity,existingStorage=null,randomSeed=null){
  const app={innerHTML:""},dom=new Map();
  const timers=new Map();let nextTimer=0;
  const storage=existingStorage||new Map(),session=new Map();
  const cryptoIds=[identity,"secret-token-"+identity+"-1234567890"];
+ const localMath=Object.create(Math);
+ if(randomSeed!==null){
+  let rng=randomSeed>>>0;
+  localMath.random=()=>((rng=(Math.imul(rng,1664525)+1013904223)>>>0)/4294967296);
+ }
  const ctx={
-  console,Math,JSON,Date,structuredClone,Peer:SimPeer,
+  console,Math:localMath,JSON,Date,structuredClone,Peer:SimPeer,
   crypto:{randomUUID:()=>cryptoIds.shift()||"backup-uuid-"+identity},
   sessionStorage:{
    getItem:k=>session.get(k)??null,
@@ -455,5 +460,76 @@ async function completeTiebreakScenario(){
  assert.equal(players.every(p=>p.view().winner===a.identity),true);
  console.log("PASS complete tie-break after full round: only tied players, exactly six turns, main scores unchanged, one winner");
 }
-main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).then(heartbeatFailoverScenario).then(completeGameScenario).then(completeTiebreakScenario).catch(err=>{console.error(err);process.exitCode=1});
+
+async function completeVariableSizeGame(size){
+ const people=Array.from({length:size},(_,i)=>client("fullgame-"+size+"-identity-"+i,null,99000+size));
+ const host=people[0],byId=new Map(people.map(p=>[p.identity,p]));
+ host.evaluate('opts={...defaults,cards:4,peeks:2,turnsAfterCabo:1,roundLimit:1,endMode:"rounds",abilityMandatory:false}');
+ host.evaluate("createRoom('Host')");await settle();
+ const room=host.evaluate("room");
+ for(let i=1;i<size;i++){people[i].evaluate("joinRoom("+JSON.stringify("P"+i)+","+JSON.stringify(room)+")");await settle()}
+ assert.equal(host.view().players.length,size);
+ host.act({type:"start"});await settle();
+ const cardsBefore=host.evaluate("state.deck.length+state.discard.length+state.players.reduce((n,p)=>n+p.hand.length,0)");
+ for(const p of people){
+  for(let i=0;i<2;i++){p.act({type:"initialPeek",index:i});await settle();p.act({type:"closeInitialPeek"});await settle()}
+  p.act({type:"donePeek"});await settle();
+ }
+ assert.equal(host.view().stage,"playing");
+ const starterId=host.view().players[host.view().turn].id;
+ for(let i=0;i<size;i++){
+  assert.equal(host.view().stage,"playing","end too soon in size "+size);
+  const id=host.view().players[host.view().turn].id,player=byId.get(id);
+  assert.ok(player);
+  if(i>0)assert.notEqual(id,starterId);
+  player.act({type:"draw",source:"deck"});await settle();
+  assert.equal(typeof player.evaluate("drawn?.v"),"number");
+  player.act({type:"discardDraw"});await settle();
+  if(player.evaluate("abilityView?.kind")){player.act({type:"finishAbility"});await settle()}
+  if(i===0){assert.equal(host.view().caboEligible,id);player.act({type:"cabo"});await settle()}
+  const conserved=host.evaluate("state.deck.length+state.discard.length+state.players.reduce((n,p)=>n+p.hand.length,0)+Object.keys(pending).length");
+  assert.equal(conserved,cardsBefore,"cards lost in size "+size+" turn "+i);
+ }
+ assert.ok(["finished","reveal"].includes(host.view().stage));
+ const mainScores=host.view().players.map(p=>p.score);
+ assert.equal(host.view().lastResult.length,size);
+ assert.ok(host.view().lastResult.some(p=>p.points===0)||host.view().lastResult.every(p=>p.points>0));
+ let attempts=0;
+ while(host.view().stage!=="finished"&&attempts<12){
+  const state=host.view();
+  assert.ok(state.tiebreak,"must have a tie to continue");
+  const eligible=state.tiebreak.ids;
+  for(const id of eligible){byId.get(id).act({type:"ready"});await settle()}
+  assert.equal(host.view().stage,"peeking");
+  for(const id of eligible){
+   const player=byId.get(id);
+   for(let i=0;i<2;i++){player.act({type:"initialPeek",index:i});await settle();player.act({type:"closeInitialPeek"});await settle()}
+   player.act({type:"donePeek"});await settle();
+  }
+  assert.equal(host.view().stage,"playing");
+  const expectedTurns=eligible.length*3;
+  for(let t=0;t<expectedTurns;t++){
+   assert.equal(host.view().stage,"playing");
+   const id=host.view().players[host.view().turn].id;
+   assert.ok(eligible.includes(id));
+   const player=byId.get(id);
+   player.act({type:"draw",source:"deck"});await settle();
+   player.act({type:"discardDraw"});await settle();
+   if(player.evaluate("abilityView?.kind")){player.act({type:"finishAbility"});await settle()}
+  }
+  attempts++;
+  assert.deepEqual(host.view().players.map(p=>p.score),mainScores);
+ }
+ assert.equal(host.view().stage,"finished","game of size "+size+" did not finish");
+ assert.ok(host.view().players.some(p=>p.id===host.view().winner));
+ assert.equal(host.view().round,1);
+ for(const p of people){
+  assert.equal(p.view().stage,"finished","guest disagrees on finish");
+  assert.equal(p.view().winner,host.view().winner,"guest disagrees on winner");
+  assert.deepEqual(p.view().players.map(p=>p.score),mainScores,"guest disagrees on totals");
+ }
+ console.log("PASS fully completed "+size+"-player game with CABO, scoring, synchronization"+(attempts?" and "+attempts+" tiebreak(s)":""));
+}
+main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).then(heartbeatFailoverScenario).then(completeGameScenario).then(completeTiebreakScenario).then(()=>completeVariableSizeGame(2)).then(()=>completeVariableSizeGame(4)).then(()=>completeVariableSizeGame(8)).catch(err=>{console.error(err);process.exitCode=1});
+
 
