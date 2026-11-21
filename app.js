@@ -258,5 +258,75 @@ else if(a.type==="multiSwap"&&pending[id]&&Array.isArray(a.indices)){const ids=[
 }
 else if(a.type==="endTurn"&&state.caboEligible===id){nextTurn()}else if(a.type==="cabo"&&!state.tiebreak&&!state.cabo&&!pending[id]&&state.caboEligible===id){state.cabo=id;state.lastTurns=state.settings.turnsAfterCabo*state.players.filter(x=>!x.paused&&x.id!==id).length;state.caboRemaining=Object.fromEntries(state.players.filter(x=>!x.paused&&x.id!==id).map(x=>[x.id,state.settings.turnsAfterCabo]));if(!state.lastTurns)scoreRound();else nextTurn(true)}
 broadcast()}
-function tick(){if(!state)return;if(state.stage==="reveal"){if(!tick.readyNotified&&Date.now()-(state.readyStart||Date.now())>60000&&!state.ready?.includes(identity)){tick.readyNotified=true;note("Bitte für die nächste Runde bereit melden.")}return}tick.readyNotified=false;if(state.stage!=="playing")return;const pausedAbility=state.abilityActive===state.players[state.turn]?.id&&state.abilityPauseAt;const t=state.turnStart+(Number(state.settings.timeout)||60)*1000-(pausedAbility?state.abilityPauseAt:Date.now()),el=$("clock");if(el)el.textContent="Zugzeit: "+(pausedAbility?"pausiert ("+Math.max(0,Math.ceil(t/1000))+" s verbleiben)":Math.max(0,Math.ceil(t/1000))+" s");if(isHost&&state.players[state.turn]?.connected===false){if(!state.connectionPauseAt){state.connectionPauseAt=Date.now();broadcast()}if(Date.now()-state.connectionPauseAt>30000&&!state.connectionNotified){state.connectionNotified=true;note("Aktiver Spieler seit 30 Sekunden offline. Gastgeber kann pausieren oder warten.")}return}if(isHost&&state.connectionPauseAt){state.turnStart+=Date.now()-state.connectionPauseAt;state.connectionPauseAt=null;state.connectionNotified=false}if(isHost&&t<=0&&!abilities[state.players[state.turn]?.id]){const p=state.players[state.turn];if(state.caboEligible===p.id){nextTurn()}else{if(pending[p.id]){if(pending[p.id].source==="discard"){const old=p.hand[0];p.hand[0]={v:pending[p.id].v,up:state.settings.faceUp};state.discard.push({...old,up:true})}else state.discard.push({...pending[p.id],up:true});delete pending[p.id]}else if(state.deck.length)state.discard.push({...state.deck.pop(),up:true});nextTurn()}broadcast()}}
+function tick(){
+ if(!state)return;
+ const now=Date.now();
+ if(state.stage==="peeking"||state.stage==="reveal"){
+  const peeking=state.stage==="peeking";
+  const started=peeking?state.peekStart:state.readyStart;
+  if(!started)return;
+  const elapsed=now-started,waitKey=state.stage+":"+started;
+  if(tick.waitKey!==waitKey){tick.waitKey=waitKey;tick.waitNotified=false;tick.hostNotified=false}
+  const needsReady=!state.ready?.includes(identity)&&(!state.tiebreak||state.tiebreak.ids.includes(identity));
+  if(elapsed>=60000&&needsReady&&!tick.waitNotified){
+   tick.waitNotified=true;
+   note(peeking?"Bitte den privaten Anfangsblick abschließen.":"Bitte für die nächste Runde bereit melden.");
+  }
+  if(isHost&&elapsed>=90000){
+   const control=$(peeking?"forcePeek":"forceReady");if(control)control.disabled=false;
+   if(!tick.hostNotified){tick.hostNotified=true;note("Seit 90 Sekunden fehlen Bestätigungen. Du kannst als Gastgeber fortfahren.")}
+  }
+  return;
+ }
+ tick.waitKey=null;tick.waitNotified=false;tick.hostNotified=false;
+ if(state.stage!=="playing")return;
+ const actingId=state.players[state.turn]?.id;
+ const pausedAbility=state.abilityActive===actingId&&state.abilityPauseAt;
+ const pausedConnection=state.connectionPauseAt&&state.players[state.turn]?.connected===false;
+ const effectiveNow=pausedAbility?state.abilityPauseAt:pausedConnection?state.connectionPauseAt:now;
+ const t=state.turnStart+(Number(state.settings.timeout)||60)*1000-effectiveNow;
+ const clock=$("clock");
+ if(clock)clock.textContent="Zugzeit: "+(pausedAbility?"pausiert (Spezialfähigkeit)":pausedConnection?"pausiert (offline)":Math.max(0,Math.ceil(t/1000))+" s");
+ if(pausedAbility){
+  const abilityKey=actingId+":"+state.abilityPauseAt;
+  if(tick.abilityKey!==abilityKey){tick.abilityKey=abilityKey;tick.abilityNotified=false;tick.abilityHostNotified=false}
+  const elapsed=now-state.abilityPauseAt;
+  if(identity===actingId&&elapsed>=60000&&!tick.abilityNotified){
+   tick.abilityNotified=true;note("Deine Spezialfähigkeit ist seit 60 Sekunden offen. Bitte abschließen.");
+  }
+  if(isHost&&elapsed>=90000){
+   const button=$("forceAbility");if(button)button.disabled=false;
+   if(!tick.abilityHostNotified){tick.abilityHostNotified=true;note("Spezialfähigkeit seit 90 Sekunden offen. Gastgeber kann sie schließen.")}
+  }
+ }else tick.abilityKey=null;
+ if(!isHost)return;
+ if(state.players[state.turn]?.connected===false){
+  if(!state.connectionPauseAt){state.connectionPauseAt=now;broadcast()}
+  if(now-state.connectionPauseAt>30000&&!state.connectionNotified){
+   state.connectionNotified=true;note("Aktiver Spieler seit 30 Sekunden offline. Gastgeber kann pausieren oder warten.");
+  }
+  return;
+ }
+ if(state.connectionPauseAt){
+  const elapsed=now-state.connectionPauseAt;
+  if(!pausedAbility)state.turnStart+=elapsed;
+  state.connectionPauseAt=null;state.connectionNotified=false;
+ }
+ if(t<=0&&!abilities[actingId]){
+  const active=state.players[state.turn];
+  if(state.caboEligible===active.id)nextTurn();
+  else{
+   if(pending[active.id]){
+    if(pending[active.id].source==="discard"){
+     const old=active.hand[0];
+     if(old){active.hand[0]={v:pending[active.id].v,up:state.settings.faceUp};state.discard.push({...old,up:true})}
+     else state.discard.push({...pending[active.id],up:true});
+    }else state.discard.push({...pending[active.id],up:true});
+    delete pending[active.id];
+   }else if(state.deck.length)state.discard.push({...state.deck.pop(),up:true});
+   nextTurn();
+  }
+  broadcast();
+ }
+}
 setInterval(tick,500);render();
