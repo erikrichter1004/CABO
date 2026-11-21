@@ -78,3 +78,20 @@ Die erfolgreichen Tests verwenden **simulierte PeerJS-Datenkanäle**, keine echt
 **Verifikation:** Die automatische Übernahme wurde in einer isolierten PeerJS-Mehrclient-Simulation mit zwei und drei Spielern geprüft: plötzlicher Absturz des Gastgebers, Erhalt der Punktestände, offener Kartenaktionen und Zugreihenfolge, erneuter Verbindungsaufbau der verbleibenden Gäste, Wechsel der Reserveperson sowie vorübergehend belegte Raumkennung. Das ersetzt keine Tests über reale WebRTC-/Mobilfunk-Verbindungen.
 
 ✅ bezieht sich ausdrücklich auf die geprüfte lokale Regellogik; **Gesamtprojekt nicht fertig**.
+
+
+## Designphase – virtueller Spieltisch (Beginn)
+
+### Tischlayout – implementiert, Browser-Endkontrolle läuft
+- Spielerperspektive: eigene Karten am unteren Tischrand; Mitspieler abhängig von der Teilnehmerzahl auf der gegenüberliegenden Tischhälfte; ihre Karten sind als verdeckte oder regelgemäß offene Karten sichtbar.
+- Nachzieh- und Ablagestapel liegen in der Tischmitte. Die bestehenden Spielaktionen sind an die Tischkarten gebunden.
+- Aktiver Spieler erhält eine optische Hervorhebung; Name, Punkte und Kartenanzahl sind am Sitz sichtbar.
+- Grüner Filztisch mit Holzrahmen, Kartenrückseiten, leichtem Schatten und responsivem Layout einschließlich schmaler iPhone-Ansichten.
+- Die bisherigen Datenattribute, Kartenaktions-IDs und Spielregeln bleiben erhalten; neue Browser-Assertions prüfen Sitzplätze und Kartenanzahl mit echten WebRTC-Clients.
+
+### Noch offen im Design (nicht als fertig kennzeichnen)
+1. Realistische, synchronisierte Zieh-/Ablage-/Tausch-Animationen einschließlich Kartenbewegungen über den Tisch.
+2. Anfangsblick als vollwertiges 3D-Kartenumdrehen; sichtbare Karte ausschließlich für berechtigte Spieler.
+3. Hochwertige Darstellung der Rundenergebnisse, Spezialfähigkeiten, Timer und der Gastgeberverwaltung als dezente Einblendungen.
+4. Design und Anordnung bei 5–8 Spielern auf kleinen Bildschirmen praktisch überprüfen und anpassen.
+5. Reconnect-Geschwindigkeit und mobilfunkbedingte Ausfälle anhand echter Geräte verbessern.
