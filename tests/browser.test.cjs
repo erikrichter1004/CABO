@@ -64,6 +64,20 @@ async function browserCheck({name,engine,device}){
   });
   assert.equal(manifest?.display,"standalone");
   assert.ok(Array.isArray(manifest?.icons)&&manifest.icons.length);
+  const installedPngIcons=manifest.icons.filter(icon=>icon.type==="image/png");
+  assert.ok(installedPngIcons.some(icon=>icon.sizes==="192x192"),"192px install icon absent");
+  assert.ok(installedPngIcons.some(icon=>icon.sizes==="512x512"),"512px install icon absent");
+  assert.match(await page.locator('link[rel="apple-touch-icon"]').getAttribute("href"),/icon-192\.png/);
+  for(const expected of [192,512]){
+   const icon=installedPngIcons.find(icon=>icon.sizes===expected+"x"+expected);
+   const size=await page.evaluate(async(src)=>{
+    const image=new Image();
+    image.src=new URL(src,document.querySelector('link[rel="manifest"]').href).href;
+    await image.decode();
+    return {width:image.naturalWidth,height:image.naturalHeight};
+   },icon.src);
+   assert.deepEqual(size,{width:expected,height:expected},"PNG pixel dimensions wrong");
+  }
   for(const icon of manifest.icons){
    const response=await page.evaluate(async src=>{
     const manifestUrl=document.querySelector('link[rel="manifest"]').href;
