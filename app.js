@@ -114,12 +114,13 @@ function createRoom(n,resume=false,fromHandoff=false){
  peer.on("error",e=>{
   if(epoch!==netEpoch)return;
   if(e.type==="unavailable-id"){
-   if(fromHandoff){
-    note("Gastgeberwechsel läuft. Raumcode wird erneut beansprucht.");
-    setTimeout(()=>{if(epoch===netEpoch&&!intentionalClose)createRoom(n,true,true)},2000);
-   }else if(resume){
-    note("Der Raum wird bereits gehostet. Beitritt als Mitspieler wird versucht.");
-    joinRoom(n,room);
+   if(fromHandoff||resume){
+    hostResumeRetries++;
+    note("Die Raumkennung ist noch belegt. Wiederherstellung wird erneut versucht (Versuch "+hostResumeRetries+").");
+    reconnectTimer=setTimeout(()=>{
+     reconnectTimer=null;
+     if(epoch===netEpoch&&!intentionalClose)createRoom(n,true,fromHandoff);
+    },Math.min(2000*hostResumeRetries,12000));
    }else{
     note("Raumcode vergeben, wähle automatisch einen neuen.");
     createRoom(n,false);
