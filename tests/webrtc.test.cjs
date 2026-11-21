@@ -32,13 +32,21 @@ async function pageFor(engine,url,port){
  return {browser,context,page,pageErrors};
 }
 async function exercise(hostEngine,guestEngine,name){
+ console.log("Starting local PeerJS signaling for "+name);
  const signaling=PeerServer({port:0,path:"/cabo",key:"peerjs"});
- await new Promise((resolve,reject)=>{if(signaling.listening)resolve();else{signaling.once("listening",resolve);signaling.once("error",reject)}});
- const port=signaling.address().port,server=webServer();
+ const begin=Date.now();
+ while(!signaling.address?.()?.port){
+  if(Date.now()-begin>8000)throw Error("Local PeerServer failed to expose a listening port within eight seconds");
+  await new Promise(resolve=>setTimeout(resolve,80));
+ }
+ const port=signaling.address().port;
+ console.log("Local signaling active on "+port);
+ const server=webServer();
  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
  const url="http://127.0.0.1:"+server.address().port+"/";
  let host,guest;
  try{
+  console.log("Opening Chromium/WebKit pages for "+name);
   host=await pageFor(hostEngine,url,port);
   guest=await pageFor(guestEngine,url,port);
   const a=host.page,b=guest.page;
@@ -48,12 +56,14 @@ async function exercise(hostEngine,guestEngine,name){
   await a.locator("#start").waitFor({timeout:15000});
   const room=await a.evaluate(()=>localStorage.getItem("caboRoom"));
   assert.match(room,/^[0-9]{4}$/);
+  console.log("Host room ready: "+room);
   await b.locator("#join").click();
   await b.locator("#playerName").fill("Gast");
   await b.locator("#code").fill(room);
   await b.locator("#go").click();
   await a.waitForFunction(()=>state?.players.length===2&&state.players[1].connected===true,null,{timeout:25000});
   await b.waitForFunction(()=>state?.players.length===2&&state.stage==="lobby",null,{timeout:25000});
+  console.log("Both browsers received lobby state");
   const conn=await b.evaluate(()=>({open:hostConn?.open,dc:hostConn?.dataChannel?.readyState||hostConn?._dc?.readyState,pc:hostConn?.peerConnection?.connectionState||hostConn?._pc?.connectionState,hasPc:!!(hostConn?.peerConnection||hostConn?._pc)}));
   assert.equal(conn.open,true,"guest PeerJS DataConnection must be open");
   assert.equal(conn.hasPc,true,"must use an actual RTCPeerConnection, not a synthetic message bus");
@@ -91,7 +101,10 @@ async function exercise(hostEngine,guestEngine,name){
  }
 }
 async function main(){
+ const guard=setTimeout(()=>{console.error("WebRTC browser integration timed out after 90 seconds");process.exit(1)},90000);
+ try{
  await exercise(chromium,chromium,"Chromium ↔ Chromium");
  await exercise(chromium,webkit,"Chromium ↔ WebKit");
+ }finally{clearTimeout(guard)}
 }
 main().catch(error=>{console.error(error);process.exitCode=1});
