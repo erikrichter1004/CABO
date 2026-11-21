@@ -12,6 +12,8 @@ jobs:
         with:
           node-version: '22'
       - name: JavaScript syntax
-        run: node --check app.js
+        run: node --check app.js && node --check sw.js
+      - name: Manifest validity
+        run: node -e "const m=JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); if(!m.icons?.length || !m.start_url) process.exit(1)"
       - name: Rule regression tests
         run: node tests/rules.test.cjs
