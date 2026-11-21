@@ -176,4 +176,41 @@ async function main(){
  console.log("PASS voluntary host handoff preserves room, private pending draw and remaining guest connections");
  console.log("PASS "+eventsSent+" simulated WebRTC messages exchanged");
 }
-main().catch(err=>{console.error(err);process.exitCode=1});
+async function recoveryScenario(){
+ const d=client("client-d-identity-0004"),e=client("client-e-identity-0005");
+ d.evaluate("createRoom('D')");await settle();
+ const room=d.evaluate("room");
+ e.evaluate("joinRoom('E','"+room+"')");await settle();
+ assert.equal(d.view().players.length,2);
+ d.act({type:"start"});await settle();
+ for(const player of [d,e]){
+  for(const index of [0,1]){
+   player.act({type:"initialPeek",index});await settle();
+   player.act({type:"closeInitialPeek"});await settle();
+  }
+  player.act({type:"donePeek"});await settle();
+ }
+ assert.equal(d.view().stage,"playing");
+ const before=d.view().turnStart;
+ d.evaluate("peer.destroy()");await settle();
+ const blocker=new SimPeer("cabo-online-v1-"+room);await settle();
+ d.evaluate(`const saved=JSON.parse(sessionStorage.getItem("caboHostSnapshot"));saved.savedAt=Date.now()-120000;sessionStorage.setItem("caboHostSnapshot",JSON.stringify(saved))`);
+ d.evaluate("createRoom('D',true)");await settle();
+ assert.equal(d.evaluate("phase"),"connecting");
+ assert.ok(d.evaluate("hostResumeRetries")>=1);
+ blocker.destroy();await settle();
+ await d.runTimers(2500);await settle();
+ assert.equal(d.evaluate("isHost"),true);
+ assert.equal(d.evaluate("peer.open"),true);
+ assert.equal(d.evaluate("room"),room);
+ assert.equal(d.view().stage,"playing");
+ assert.ok(d.view().turnStart-before>=110000,"turn clock must pause through downtime");
+ assert.equal(d.view().players[1].connected,false);
+ await e.runTimers(2500);await settle();
+ assert.equal(e.view().players.length,2);
+ assert.equal(e.view().revision,d.view().revision);
+ assert.equal(d.view().players[1].connected,true);
+ console.log("PASS crashed host can reclaim original room after PeerJS ID is released; guest rejoins");
+ console.log("PASS resumed host freezes game clock through extended downtime");
+}
+main().then(recoveryScenario).catch(err=>{console.error(err);process.exitCode=1});
