@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id),app=$("app");let peer=null,hostConn=null,connections=new Map(),state=null,identity=sessionStorage.getItem("caboIdentity")||crypto.randomUUID(),room=sessionStorage.getItem("caboRoom")||"",isHost=false,selected=[],drawn=null,peek=null,phase="home",ticker=null;
 sessionStorage.setItem("caboIdentity",identity);
 const defaults={cards:4,peeks:2,turnsAfterCabo:1,limit:100,roundLimit:10,endMode:"points",failure:"medium",faceUp:false,reshuffle:true,multiLimit:8,abilityOwn:true,abilityOpponent:true,abilitySwap:true,abilityMode:"classic",abilityMandatory:false,exactRescue:true,kamikaze:true,startMode:"rotate",timeout:60,customCounts:""};
-let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0,reconnectTimer=null;
+let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0,reconnectTimer=null,hostResumeRetries=0;
 let resumeSecret=sessionStorage.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={},handoffTarget=null,pendingHandoff=null,handoffTimeout=null;
 sessionStorage.setItem("caboResumeSecret",resumeSecret);
 let actionSequence=Number(sessionStorage.getItem("caboActionSequence")||0);
@@ -10,7 +10,7 @@ const clean=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":
 function note(msg){const n=$("notice");n.textContent=msg;n.classList.add("show");clearTimeout(note.t);note.t=setTimeout(()=>n.classList.remove("show"),6000)}
 function setPhase(p){phase=p;render()}
 function home(){
- intentionalClose=true;if(handoffTimeout){clearTimeout(handoffTimeout);handoffTimeout=null}
+ intentionalClose=true;hostResumeRetries=0;if(handoffTimeout){clearTimeout(handoffTimeout);handoffTimeout=null}
  handoffTarget=null;pendingHandoff=null;
  sessionStorage.removeItem("caboHostSnapshot");closeNet();state=null;room="";
  sessionStorage.removeItem("caboRoom");setPhase("home");
@@ -39,6 +39,7 @@ function readOptions(){opts.customCounts=$("customCounts")?.value.trim()||"";doc
 function render(){if(phase==="home"){app.innerHTML='<div class="panel"><div class="actions"><button id="create">Neue Partie erstellen</button><button id="join">Raum beitreten</button>'+(sessionStorage.getItem("caboHostSnapshot")?'<button id="resume">Gastgeber-Partie fortsetzen</button>':'')+'</div><p class="muted">Online-PWA · 2–8 Spieler · vierstelliger Raumcode</p></div>';$("create").onclick=()=>setPhase("create");$("join").onclick=()=>setPhase("join");if($("resume"))$("resume").onclick=()=>createRoom(sessionStorage.getItem("caboName")||"Gastgeber",true);return}
 if(phase==="create"){app.innerHTML='<div class="panel"><h2>Neue Partie erstellen</h2>'+nameField()+'<details open><summary>Spieleinstellungen (Standardwerte vorausgewählt)</summary>'+optionsUI()+'</details><button id="go">Raum erstellen</button><button class="outline" id="back">Zurück</button></div>';$("back").onclick=home;$("go").onclick=()=>{const n=takeName();if(n){readOptions();const error=validateSettings(opts,2);if(error){note(error);return}createRoom(n)}};return}
 if(phase==="join"){app.innerHTML='<div class="panel"><h2>Raum beitreten</h2>'+nameField()+'<label>Vierstelliger Code<input id="code" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="1234"></label><button id="go">Beitreten</button><button class="outline" id="back">Zurück</button></div>';$("back").onclick=home;$("go").onclick=()=>{let n=takeName(),c=$("code").value.trim();if(n&&/^\d{4}$/.test(c))joinRoom(n,c);else note("Bitte Namen und vierstelligen Code eingeben.")};return}
+if(phase==="connecting"){app.innerHTML='<div class="panel"><p>Verbindung zum Raum wird aufgebaut…</p><button id="cancelConnect" class="outline">Abbrechen</button></div>';$("cancelConnect").onclick=home;return}
 if(!state){app.innerHTML='<div class="panel">Verbinde…</div>';return}
 const me=state.players.find(p=>p.id===identity),host=state.players.find(p=>p.id===state.host),active=state.players[state.turn],myTurn=state.started&&state.stage==="playing"&&active?.id===identity&&!me?.paused;
 let out='<div class="panel"><b>Raum '+clean(room)+'</b> · '+(isHost?"Gastgeber":"Mitspieler")+' <span class="pill">'+clean(state.stage)+'</span><p class="muted">Spieler: '+state.players.length+'/8 · Runde '+state.round+'</p><button class="outline" id="leave">Raum verlassen</button>';
@@ -232,7 +233,7 @@ function sendAction(action){
 }
 function privateState(id){const copy=structuredClone(state);delete copy.lastClientSeq;for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
 function sendStateTo(id,conn){if(conn?.open)conn.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null})}
-function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets}))}catch{}for(const [id,c] of connections)sendStateTo(id,c);const own=privateState(identity);stateView=own;renderHost()}
+function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets,savedAt:Date.now()}))}catch{}for(const [id,c] of connections)sendStateTo(id,c);const own=privateState(identity);stateView=own;renderHost()}
 let stateView=null,pending={},privatePeeks={},abilities={},abilityView=null;
 function renderHost(){const full=state;state=stateView;drawn=pending[identity]||null;peek=privatePeeks[identity]||null;abilityView=abilities[identity]||null;render();state=full}
 function validateSettings(settings,playerCount=2){
