@@ -327,4 +327,21 @@ async function standbyReassignmentScenario(){
  assert.equal(b.view().host,c.identity);
  console.log("PASS pausing a standby revokes its complete backup and moves automatic succession to next active player");
 }
-main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).catch(err=>{console.error(err);process.exitCode=1});
+async function heartbeatFailoverScenario(){
+ const a=client("heartbeat-host-a-identity-0014"),b=client("heartbeat-guest-b-identity-0015");
+ a.evaluate("createRoom('A')");await settle();const room=a.evaluate("room");
+ b.evaluate("joinRoom('B','"+room+"')");await settle();
+ assert.equal(b.evaluate("standbySnapshot?.state?.host"),a.identity);
+ b.evaluate("hostLastSeenAt=Date.now()-22000;tick()");await settle();
+ assert.equal(b.evaluate("isHost"),true);
+ assert.equal(b.evaluate("phase"),"connecting");
+ assert.ok(b.evaluate("hostResumeRetries")>=1);
+ assert.equal(a.evaluate("peer.open"),true);
+ a.evaluate("peer.destroy()");await settle();
+ await b.runTimers(2500);await settle();
+ assert.equal(b.evaluate("peer.open"),true);
+ assert.equal(b.evaluate("room"),room);
+ assert.equal(b.view().host,b.identity);
+ console.log("PASS silent host heartbeat timeout cannot steal occupied peer ID; takeover retries until old host releases it");
+}
+main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).then(heartbeatFailoverScenario).catch(err=>{console.error(err);process.exitCode=1});
