@@ -16,11 +16,11 @@
 | 2 | Spezialfähigkeiten 7–12 | ✅ Bereichslogik abgeschlossen | Eigene/fremde geheime Ansicht, blinder Tausch, Classic/Extended, Pflicht/Wahl, Timerpause, Zielprüfung |
 | 3 | CABO & Schlusszüge | ✅ Bereichslogik abgeschlossen | Nur nach Zug, ohne Rücknahme, eigener Schlusszugzähler je Gegner (0–3), Ansager setzt aus, pausierte Spieler in Wertung |
 | 4 | Punkte & Spielende | ✅ Bereichslogik abgeschlossen | CABO-Erfolg/Gleichstand, 100→50, Kamikaze, Punktelimit/feste Runden, Stichrunde mit vier Karten/zwei Blicken/drei Zügen |
-| 5 | Echtzeit-Multiplayer | 🟡 In Arbeit | Ereignisbasiertes Host-Snapshot, private Kartendaten, WebRTC-Wiederbeitritt mit privatem Sitzungsschlüssel, veraltete Verbindung gesperrt; **echte Verbindungsproben fehlen** |
-| 6 | Gastgeberverwaltung | 🟡 In Arbeit | Pausieren/Entfernen, Aufräumen offener Züge, 30-s-Verbindungsunterbrechung, **bestätigte freiwillige Übergabe** mit gleichem Raumcode implementiert; **ungeplanter Hostabsturz noch nicht automatisch überbrückbar** |
+| 5 | Echtzeit-Multiplayer | ✅ Bereichslogik abgeschlossen | Ereignisbasiertes Host-Snapshot, private Kartendaten, Authentifizierung und Replay-Schutz, Zustand je Revision; drei simulierte Clients mit echten Ereignisnachrichten geprüft, praktische Gerätetests in Schritt 9 |
+| 6 | Gastgeberverwaltung | 🟡 In Arbeit | Pausieren/Entfernen, 30-s-Offline-Regel, bestätigte freiwillige Übergabe und manuelle Wiederherstellung des Gastgebers sind simuliert; **automatischer Wechsel bei unerwartetem Hostabsturz ohne Rückkehr fehlt** |
 | 7 | Runden- und Zeitsteuerung | ✅ Bereichslogik abgeschlossen | 60-s-Erinnerung, Gastgeberfreigabe ab 90 s, Ready- und Peek-Gates, Überfällige Spezialfähigkeit beenden, Zugtimer und Offline-Pause |
-| 8 | Vollständige Regeltests | 🟡 In Arbeit | **75 automatische Regressionstests**, GitHub Actions bei jedem Push; zusätzliche Stresstests/weitere Grenzfälle fehlen |
-| 9 | Integration & Stabilität | ⬜ Offen | Mehrclient-/Mehrgeräte-Durchläufe, WebRTC-Abbrüche, Hostübergabe praktisch testen, PWA-Installierbarkeit und Service-Worker-Integration, aufgelistete Fehler beseitigen |
+| 8 | Vollständige Regeltests | 🟡 In Arbeit | **84 automatische Regel-/Stresstests** plus Mehrclient-Simulationen in GitHub Actions; weitere Grenzfälle und Tests unter echten Browsern fehlen |
+| 9 | Integration & Stabilität | 🟡 In Arbeit | Simulierte Drei-Spieler-Partie mit privaten Karten, Wiederbeitritt, Raumübergabe und Snapshot-Schutz sowie Host-Wiederherstellung aus Session-Snapshot getestet; echte Browser-/Mehrgerätetests und PWA-Prüfung stehen aus |
 
 ## Letzter abgeschlossener Implementierungsblock
 
@@ -34,7 +34,14 @@
 
 ## Nächster konkreter Schritt
 
-**Bereich 5 und 6 vervollständigen:** zuverlässiger Wiederbeitritt, Client-Synchronisation unter echten PeerJS-Verbindungsabbrüchen, Migration beim unerwarteten Hostverlust. Anschließend Schritt 8 und 9 mit durchgehenden Integrationstests.
+**Bereiche 6, 8 und 9:** Lösungen für überraschenden Hostverlust ohne vertrauenswürdigen Server prüfen, zusätzliche Stresstests und echte Browser-Multiplayer-Tests durchführen.
+
+### Zusätzliche Prüfnachweise
+
+- 84 automatische Regel- und Stresstests, einschließlich 2–8 Spielenden und konsistentem Kartenbestand.
+- Drei vollständig getrennte simulierte Browser-Clients tauschen echte simulierte Datenkanal-Nachrichten aus: Zugwechsel, private Karten, Anfangsblick, Wiederverbindung, freiwilliger Hostwechsel.
+- Überraschender Hostausfall **mit anschließender Wiederherstellung durch den ursprünglichen Gastgeber** getestet: dieselbe Raumkennung, kurzzeitig blockierte Peer-ID, gefrorene Zugzeit und erneuter Beitritt der Mitspieler.
+- GitHub Actions prüft Code-Syntax, PWA-Manifest, Regeltests und Mehrclient-Simulation bei jedem Push.
 
 **Technische Einschränkung:** Eine garantiert geheime und zugleich absturzsichere automatische Wiederherstellung des vollständigen Kartenzustands ist in reinem Peer-to-Peer-Hosting ohne vertrauenswürdigen externen Speicher nicht trivial. Beim freiwilligen Wechsel erhält der übernehmende Gastgeber den vollständigen Zustand. Ein unerwarteter Hostverlust ist daher noch **nicht** als abgeschlossen zu werten.
 
