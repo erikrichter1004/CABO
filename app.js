@@ -36,7 +36,18 @@ function takeName(){const n=$("playerName")?.value.trim();if(!n){note("Bitte Nam
 function optionsUI(){const choices=(key,label,values)=>'<label>'+label+'<select data-option="'+key+'">'+values.map(([v,t])=>'<option value="'+v+'" '+(String(opts[key])===String(v)?"selected":"")+'>'+t+'</option>').join("")+'</select></label>';return '<div class="settings">'+[
 choices("cards","Startkarten",[[3,3],[4,4],[5,5],[6,6],[7,7],[8,8]]),choices("peeks","Anfangsblick",[[0,0],[1,1],[2,2],[3,3],[4,4]]),choices("turnsAfterCabo","Letzte Züge nach CABO",[[0,0],[1,1],[2,2],[3,3]]),choices("endMode","Spielende",[["points","Punktegrenze"],["rounds","Rundenzahl"]]),choices("limit","Punktegrenze",[[50,50],[75,75],[100,100],[150,150],[200,200]]),choices("roundLimit","Rundenanzahl",[[5,5],[10,10],[15,15],[20,20]]),choices("failure","Fehler beim Mehrfachablegen",[["light","Zug endet"],["medium","+1 Karte"],["hard","+1 Karte je Fehler"]]),choices("faceUp","Eingetauschte Karten",[["false","Verdeckt"],["true","Offen"]]),choices("reshuffle","Leerer Nachziehstapel",[["true","Ablagestapel mischen"],["false","Runde beenden"]]),choices("multiLimit","Max. Mehrfachablage",[[2,2],[3,3],[4,4],[5,5],[6,6],[7,7],[8,"Unbegrenzt"]]),choices("abilityOwn","7/8 Eigene Karte ansehen",[["true","An"],["false","Aus"]]),choices("abilityOpponent","9/10 Gegnerkarte ansehen",[["true","An"],["false","Aus"]]),choices("abilitySwap","11/12 Karten tauschen",[["true","An"],["false","Aus"]]),choices("abilityMode","Spezialfähigkeiten",[["classic","Nur direkt gezogene Karte"],["extended","Auch aus eigener Hand"]]),choices("abilityMandatory","Fähigkeiten verpflichtend",[["false","Nein"],["true","Ja"]]),choices("exactRescue","100 → 50 Rettung",[["true","An"],["false","Aus"]]),choices("kamikaze","Kamikaze 12/12/13/13",[["true","An"],["false","Aus"]]),choices("startMode","Startspieler",[["rotate","Rotierend"],["same","Immer gleich"],["random","Zufällig"]])].join("")+'</div><label>Eigene Kartenhäufigkeiten 0–13 (14 Zahlen, Komma-getrennt, optional)<input id="customCounts" placeholder="4,4,4,4,4,4,4,4,4,4,4,4,4,2" value="'+clean(opts.customCounts||"")+'"></label>'}
 function readOptions(){opts.customCounts=$("customCounts")?.value.trim()||"";document.querySelectorAll("[data-option]").forEach(e=>{let v=e.value;opts[e.dataset.option]=v==="true"?true:v==="false"?false:/^\d+$/.test(v)?Number(v):v})}
-function render(){if(phase==="home"){app.innerHTML='<div class="panel"><div class="actions"><button id="create">Neue Partie erstellen</button><button id="join">Raum beitreten</button>'+(sessionStorage.getItem("caboHostSnapshot")?'<button id="resume">Gastgeber-Partie fortsetzen</button>':'')+'</div><p class="muted">Online-PWA · 2–8 Spieler · vierstelliger Raumcode</p></div>';$("create").onclick=()=>setPhase("create");$("join").onclick=()=>setPhase("join");if($("resume"))$("resume").onclick=()=>createRoom(sessionStorage.getItem("caboName")||"Gastgeber",true);return}
+function render(){if(phase==="home"){
+ const savedHost=sessionStorage.getItem("caboHostSnapshot");
+ const lastRoom=sessionStorage.getItem("caboRoom"),lastName=sessionStorage.getItem("caboName");
+ app.innerHTML='<div class="panel"><div class="actions"><button id="create">Neue Partie erstellen</button><button id="join">Raum beitreten</button>'
+ +(savedHost?'<button id="resume">Gastgeber-Partie fortsetzen</button>':'')
+ +(!savedHost&&/^[0-9]{4}$/.test(lastRoom||"")&&lastName?'<button id="rejoin">Letzter Partie wieder beitreten ('+clean(lastRoom)+')</button>':'')
+ +'</div><p class="muted">Online-PWA · 2–8 Spieler · vierstelliger Raumcode</p></div>';
+ $("create").onclick=()=>setPhase("create");$("join").onclick=()=>setPhase("join");
+ if($("resume"))$("resume").onclick=()=>createRoom(lastName||"Gastgeber",true);
+ if($("rejoin"))$("rejoin").onclick=()=>joinRoom(lastName,lastRoom);
+ return;
+}
 if(phase==="create"){app.innerHTML='<div class="panel"><h2>Neue Partie erstellen</h2>'+nameField()+'<details open><summary>Spieleinstellungen (Standardwerte vorausgewählt)</summary>'+optionsUI()+'</details><button id="go">Raum erstellen</button><button class="outline" id="back">Zurück</button></div>';$("back").onclick=home;$("go").onclick=()=>{const n=takeName();if(n){readOptions();const error=validateSettings(opts,2);if(error){note(error);return}createRoom(n)}};return}
 if(phase==="join"){app.innerHTML='<div class="panel"><h2>Raum beitreten</h2>'+nameField()+'<label>Vierstelliger Code<input id="code" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="1234"></label><button id="go">Beitreten</button><button class="outline" id="back">Zurück</button></div>';$("back").onclick=home;$("go").onclick=()=>{let n=takeName(),c=$("code").value.trim();if(n&&/^\d{4}$/.test(c))joinRoom(n,c);else note("Bitte Namen und vierstelligen Code eingeben.")};return}
 if(phase==="connecting"){app.innerHTML='<div class="panel"><p>Verbindung zum Raum wird aufgebaut…</p><button id="cancelConnect" class="outline">Abbrechen</button></div>';$("cancelConnect").onclick=home;return}
@@ -159,7 +170,7 @@ function scheduleReconnect(n,c,epoch){
 function joinRoom(n,c){
  intentionalClose=true;closeNet();intentionalClose=false;
  const epoch=netEpoch;
- room=c;isHost=false;setPhase("connecting");
+ room=c;sessionStorage.setItem("caboRoom",c);isHost=false;setPhase("connecting");
  peer=new Peer();
  peer.on("open",()=>{
   if(epoch!==netEpoch)return;
