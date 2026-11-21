@@ -344,4 +344,113 @@ async function heartbeatFailoverScenario(){
  assert.equal(b.view().host,b.identity);
  console.log("PASS silent host heartbeat timeout cannot steal occupied peer ID; takeover retries until old host releases it");
 }
-main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).then(heartbeatFailoverScenario).catch(err=>{console.error(err);process.exitCode=1});
+
+async function completeGameScenario(){
+ const a=client("game-host-a-identity-0016"),b=client("game-guest-b-identity-0017"),c=client("game-guest-c-identity-0018");
+ a.evaluate('opts={...defaults,endMode:"rounds",roundLimit:3,cards:4,peeks:2,turnsAfterCabo:1,abilityMode:"classic",abilityMandatory:false}');
+ a.evaluate("createRoom('A')");await settle();
+ const room=a.evaluate("room");
+ b.evaluate("joinRoom('B',"+JSON.stringify(room)+")"); // replaced below
+ c.evaluate("joinRoom('C',"+JSON.stringify(room)+")");
+ await settle();
+ const participants=[a,b,c],byId=new Map(participants.map(p=>[p.identity,p]));
+ assert.equal(a.view().players.length,3);
+ let previousScores=[0,0,0],totalTurns=0;
+ for(let round=1;round<=3;round++){
+  assert.equal(a.view().stage,"peeking");
+  assert.equal(a.view().round,round);
+  for(const p of participants){
+   assert.equal(p.view().stage,"peeking");
+   for(const index of [0,1]){
+    p.act({type:"initialPeek",index});await settle();
+    assert.equal(p.evaluate("peek?.index"),index);
+    p.act({type:"closeInitialPeek"});await settle();
+   }
+   p.act({type:"donePeek"});await settle();
+  }
+  assert.equal(a.view().stage,"playing");
+  const starter=a.view().players[a.view().turn].id;
+  for(let i=0;i<3;i++){
+   assert.equal(a.view().stage,"playing");
+   const actorId=a.view().players[a.view().turn].id,actor=byId.get(actorId);
+   assert.ok(actor,"unknown actor");
+   actor.act({type:"draw",source:"deck"});await settle();
+   assert.equal(typeof actor.evaluate("drawn?.v"),"number");
+   for(const other of participants)if(other!==actor)assert.equal(other.evaluate("drawn"),null);
+   actor.act({type:"swapDraw",index:0});await settle();
+   assert.equal(actor.evaluate("drawn"),null);
+   totalTurns++;
+   if(i===0){actor.act({type:"cabo"});await settle();assert.equal(a.view().cabo,starter)}
+   else if(a.view().stage==="playing"&&a.view().caboEligible===actorId){
+    actor.act({type:"endTurn"});await settle();
+   }
+   if(a.view().stage==="reveal")break;
+  }
+  assert.equal(a.view().stage,"reveal","CABO final turns must score round");
+  const latest=a.view();
+  assert.equal(latest.lastResult.length,3);
+  for(const [i,p] of latest.players.entries()){
+   assert.equal(p.hand.every(card=>card.up&&Number.isInteger(card.v)),true);
+   assert.equal(p.score,previousScores[i]+latest.lastResult[i].points===100&&latest.settings.exactRescue&&!p.rescued ? 50 : p.score);
+  }
+  const scores=latest.players.map(p=>p.score);
+  assert.equal(participants.every(p=>p.view().players.every((x,i)=>x.score===scores[i])),true);
+  previousScores=scores;
+  if(round<3){
+   for(const p of participants){p.act({type:"ready"});await settle()}
+   assert.equal(a.view().stage,"peeking");
+  }
+ }
+ assert.equal(totalTurns,9);
+ let last=a.view();
+ if(last.tiebreak){
+  // In a tied finish, the next phase is deliberately left for the dedicated tiebreak test.
+  assert.equal(last.stage,"reveal");
+ }else assert.equal(last.stage,"finished");
+ console.log("PASS complete three-round, three-client game covers starting peeks, CABO, final turns, scoring and ready transitions");
+}
+async function completeTiebreakScenario(){
+ const a=client("tie-host-a-identity-0019"),b=client("tie-guest-b-identity-0020"),c=client("tie-guest-c-identity-0021");
+ a.evaluate('opts={...defaults,endMode:"rounds",roundLimit:1,cards:4,peeks:2,reshuffle:false,abilityOwn:false,abilityOpponent:false,abilitySwap:false}');
+ a.evaluate("createRoom('A')");await settle();const room=a.evaluate("room");
+ b.evaluate("joinRoom('B',"+JSON.stringify(room)+")");c.evaluate("joinRoom('C',"+JSON.stringify(room)+")");await settle();
+ const players=[a,b,c],byId=new Map(players.map(p=>[p.identity,p]));
+ a.act({type:"start"});await settle();
+ for(const p of players){
+  for(const i of [0,1]){p.act({type:"initialPeek",index:i});await settle();p.act({type:"closeInitialPeek"});await settle()}
+  p.act({type:"donePeek"});await settle();
+ }
+ assert.equal(a.view().stage,"playing");
+ a.evaluate('state.players[0].hand=[{v:2,up:false},{v:2,up:false},{v:0,up:false},{v:0,up:false}];state.players[1].hand=[{v:1,up:false},{v:1,up:false},{v:1,up:false},{v:1,up:false}];state.players[2].hand=[{v:7,up:false},{v:8,up:false},{v:6,up:false},{v:5,up:false}];state.deck=[];state.discard=[{v:4,up:true}];broadcast()');await settle();
+ a.act({type:"draw",source:"deck"});await settle();
+ assert.equal(a.view().stage,"reveal");
+ assert.deepEqual(a.view().players.map(p=>p.score),[4,4,26]);
+ assert.deepEqual(a.view().tiebreak.ids,[a.identity,b.identity]);
+ for(const p of [a,b]){p.act({type:"ready"});await settle()}
+ assert.equal(a.view().stage,"peeking");
+ assert.equal(a.view().round,1);
+ assert.equal(a.view().players[0].hand.length,4);assert.equal(a.view().players[1].hand.length,4);assert.equal(a.view().players[2].hand.length,0);
+ for(const p of [a,b]){
+  for(const i of [0,1]){p.act({type:"initialPeek",index:i});await settle();p.act({type:"closeInitialPeek"});await settle()}
+  p.act({type:"donePeek"});await settle();
+ }
+ assert.equal(a.view().stage,"playing");
+ a.evaluate('state.players[0].hand=Array.from({length:4},()=>({v:0,up:false}));state.players[1].hand=Array.from({length:4},()=>({v:13,up:false}));broadcast()');await settle();
+ let turns=0;
+ while(a.view().stage==="playing"&&turns<10){
+  const actorId=a.view().players[a.view().turn].id,actor=byId.get(actorId);
+  assert.notEqual(actorId,c.identity);
+  actor.act({type:"draw",source:"deck"});await settle();
+  actor.act({type:"discardDraw"});await settle();
+  if(a.view().stage==="playing"&&a.view().caboEligible===actorId){actor.act({type:"endTurn"});await settle()}
+  turns++;
+ }
+ assert.equal(turns,6,"each tied player must have exactly three mini-turns");
+ assert.equal(a.view().stage,"finished");
+ assert.equal(a.view().winner,a.identity);
+ assert.deepEqual(a.view().players.map(p=>p.score),[4,4,26]);
+ assert.equal(players.every(p=>p.view().winner===a.identity),true);
+ console.log("PASS complete tie-break after full round: only tied players, exactly six turns, main scores unchanged, one winner");
+}
+main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).then(heartbeatFailoverScenario).then(completeGameScenario).then(completeTiebreakScenario).catch(err=>{console.error(err);process.exitCode=1});
+
