@@ -284,4 +284,47 @@ async function automaticFailoverScenario(){
  console.log("PASS unannounced host crash elects designated standby, preserves room, all secrets, pending draws, scores and current turn");
  console.log("PASS remaining guest automatically reconnects and finishes draw under new host");
 }
-main().then(recoveryScenario).then(automaticFailoverScenario).catch(err=>{console.error(err);process.exitCode=1});
+async function twoPlayerFailoverScenario(){
+ const a=client("duo-host-a-identity-0009"),b=client("duo-guest-b-identity-0010");
+ a.evaluate("createRoom('A')");await settle();const room=a.evaluate("room");
+ b.evaluate("joinRoom('B','"+room+"')");await settle();
+ a.act({type:"start"});await settle();
+ for(const player of [a,b]){
+  for(const index of [0,1]){player.act({type:"initialPeek",index});await settle();player.act({type:"closeInitialPeek"});await settle()}
+  player.act({type:"donePeek"});await settle();
+ }
+ assert.equal(turnOf(a),a.identity);
+ assert.equal(b.evaluate("standbySnapshot?.state?.host"),a.identity);
+ a.evaluate("peer.destroy()");await settle();
+ assert.equal(b.evaluate("isHost"),true);
+ assert.equal(b.view().host,b.identity);
+ assert.equal(turnOf(b),b.identity);
+ assert.equal(b.evaluate("room"),room);
+ b.act({type:"draw",source:"deck"});await settle();
+ b.act({type:"swapDraw",index:0});await settle();
+ b.act({type:"cabo"});await settle();
+ assert.equal(b.view().stage,"reveal");
+ assert.equal(b.view().players.length,2);
+ console.log("PASS two-player sudden host loss elects only surviving player and permits completing CABO round");
+}
+async function standbyReassignmentScenario(){
+ const a=client("switch-host-a-identity-0011"),b=client("switch-guest-b-identity-0012"),c=client("switch-guest-c-identity-0013");
+ a.evaluate("createRoom('A')");await settle();const room=a.evaluate("room");
+ b.evaluate("joinRoom('B','"+room+"')");c.evaluate("joinRoom('C','"+room+"')");await settle();
+ assert.equal(a.view().standby,b.identity);
+ assert.ok(b.evaluate("standbySnapshot"));
+ a.act({type:"pause",id:b.identity});await settle();
+ assert.equal(a.view().standby,c.identity);
+ assert.equal(b.evaluate("standbySnapshot"),null);
+ assert.equal(c.evaluate("standbySnapshot?.state?.host"),a.identity);
+ a.evaluate("peer.destroy()");await settle();
+ assert.equal(c.evaluate("isHost"),true);
+ assert.equal(c.view().host,c.identity);
+ assert.equal(c.evaluate("room"),room);
+ assert.equal(c.view().players[1].paused,true);
+ assert.equal(b.evaluate("isHost"),false);
+ await b.runTimers(2500);await settle();
+ assert.equal(b.view().host,c.identity);
+ console.log("PASS pausing a standby revokes its complete backup and moves automatic succession to next active player");
+}
+main().then(recoveryScenario).then(automaticFailoverScenario).then(twoPlayerFailoverScenario).then(standbyReassignmentScenario).catch(err=>{console.error(err);process.exitCode=1});
