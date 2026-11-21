@@ -1,37 +1,41 @@
 # CABO Online – verbindlicher Funktionsplan
 
-Ziel: **Alle vereinbarten Funktionen und Regeln vollständig implementieren und mit automatisierten Tests absichern**, bevor die grafische Gestaltung und Animationen beginnen. Der Nutzer muss keine Zwischenstände testen.
+**Arbeitsreihenfolge:** Funktionen und Regeln zuerst, anschließend mehrstufige technische Tests, erst danach Design und Animationen. Keine Nutzer-Zwischentests vor dem Integrationsschritt.
 
-## Statusdefinitionen
+## Fortschrittsdefinition
 
-- ✅ **Regellogik abgeschlossen:** Implementierung und automatisierte Bereichstests erfolgreich. Geräteübergreifende Integration wird zusätzlich in Schritt 9 überprüft.
-- 🟡 **Teilweise umgesetzt:** Bestehender Code, aber Regeln/Sonderfälle noch nicht vollständig geprüft.
-- ⬜ **Offen:** Funktion oder Testabdeckung fehlt.
+- ✅ **Bereichslogik abgeschlossen:** implementierte Regeln und automatisierte Bereichstests erfolgreich. Noch kein Beleg für funktionierende Multiplayer-Partien auf echten Geräten.
+- 🟡 **In Arbeit:** relevanter Code besteht, aber wichtige Szenarien oder Integration fehlen.
+- ⬜ **Offen:** Abnahmekriterien noch nicht ausreichend umgesetzt.
 
-## Reihenfolge (Stand 21.11.2026)
+## Status – 21. November 2026
 
-| Nr. | Bereich | Stand | Abnahmekriterien |
+| Nr. | Bereich | Status | Bemerkung |
 |---|---|---|---|
-| 1 | Grundspiel und Kartenaktionen | ✅ Regellogik abgeschlossen | Offizieller 52er-Stapel (0/13 je 2, 1–12 je 4), Verdopplung für größere Partien, validierte Sonderverteilung, private Anfangsblickauswahl, Ziehen, Ablage, Einzeltäusche, identische Mehrfachkarten, Strafkarten, offener Ablagestapel, Nachmischen und Deckende |
-| 2 | Spezialfähigkeiten | 🟡 Teilweise umgesetzt | 7/8 eigene Karte, 9/10 fremde Karte, 11/12 blinder Tausch, klassisch/erweitert, verpflichtend/optional, Geheimhaltung und Zeitstopp, gezielte Regeltests |
-| 3 | CABO und Schlusszüge | 🟡 Teilweise umgesetzt | Ansage nur nach Zug, kein Rückruf, Ansager gesperrt, 0–3 letzte Züge pro Gegner, Überprüfung bei Pausen/Entfernung, Tests |
-| 4 | Punkte und Spielende | 🟡 Teilweise umgesetzt | Erfolgreiche/gescheiterte CABO-Ansage samt Gleichstand, 100→50 einmalig, Kamikaze, Limits und Rundenzahl, wiederholte Stichrunden, Tests |
-| 5 | Echtzeit-Multiplayer | 🟡 Teilweise umgesetzt | Host-autoritative, ereignisbasierte Synchronisation, keine widersprüchlichen Zuganzeigen, private Karten, Schutz vor doppelten/veralteten Aktionen, Wiederbeitritt |
-| 6 | Gastgeberverwaltung | 🟡 Teilweise umgesetzt | Pausieren, Entfernen, 30-s-Offline-Regel, Wiederaufnahme, zuverlässiger Hostwechsel mit vollständigem Spielfortbestand |
-| 7 | Runden- und Zeitsteuerung | 🟡 Teilweise umgesetzt | Ready je aktiver Person, 60-s-Erinnerung, Hostentscheidung ab 90 s, Timerpause, automatische Zeitüberschreitung, Sonderfälle |
-| 8 | Gesamtregeltests | ⬜ Offen | Tests sämtlicher vereinbarter Regeln, Fehler-/Grenzfälle, Spielerzahlen 2–8, technische CI |
-| 9 | Multiplayer-Integration | ⬜ Offen | Durchgehende Proberunden, mehrere simulierte Clients/Geräte, Abbrüche und Wiederverbindungen; keine bekannten Blocker |
+| 1 | Grundspiel & Kartenaktionen | ✅ Bereichslogik abgeschlossen | 52er-/skalierter Stapel, Zug und Ablage, Einzel- und Mehrfachaktionen, Fehlversuchstypen, Nachmischen |
+| 2 | Spezialfähigkeiten 7–12 | ✅ Bereichslogik abgeschlossen | Eigene/fremde geheime Ansicht, blinder Tausch, Classic/Extended, Pflicht/Wahl, Timerpause, Zielprüfung |
+| 3 | CABO & Schlusszüge | ✅ Bereichslogik abgeschlossen | Nur nach Zug, ohne Rücknahme, eigener Schlusszugzähler je Gegner (0–3), Ansager setzt aus, pausierte Spieler in Wertung |
+| 4 | Punkte & Spielende | ✅ Bereichslogik abgeschlossen | CABO-Erfolg/Gleichstand, 100→50, Kamikaze, Punktelimit/feste Runden, Stichrunde mit vier Karten/zwei Blicken/drei Zügen |
+| 5 | Echtzeit-Multiplayer | 🟡 In Arbeit | Ereignisbasiertes Host-Snapshot, private Kartendaten, WebRTC-Wiederbeitritt mit privatem Sitzungsschlüssel, veraltete Verbindung gesperrt; **echte Verbindungsproben fehlen** |
+| 6 | Gastgeberverwaltung | 🟡 In Arbeit | Pausieren/Entfernen, Aufräumen offener Züge, 30-s-Verbindungsunterbrechung, **bestätigte freiwillige Übergabe** mit gleichem Raumcode implementiert; **ungeplanter Hostabsturz noch nicht automatisch überbrückbar** |
+| 7 | Runden- und Zeitsteuerung | ✅ Bereichslogik abgeschlossen | 60-s-Erinnerung, Gastgeberfreigabe ab 90 s, Ready- und Peek-Gates, Überfällige Spezialfähigkeit beenden, Zugtimer und Offline-Pause |
+| 8 | Vollständige Regeltests | 🟡 In Arbeit | **75 automatische Regressionstests**, GitHub Actions bei jedem Push; zusätzliche Stresstests/weitere Grenzfälle fehlen |
+| 9 | Integration & Stabilität | ⬜ Offen | Mehrclient-/Mehrgeräte-Durchläufe, WebRTC-Abbrüche, Hostübergabe praktisch testen, PWA-Installierbarkeit und Service-Worker-Integration, aufgelistete Fehler beseitigen |
 
-## Abgeschlossene Arbeiten in Bereich 1
+## Letzter abgeschlossener Implementierungsblock
 
-- Standard-Kartensatz mit **52 Karten** korrigiert: 0 und 13 je zweimal, 1–12 je viermal. Ab sechs Spielern zwei Standardsätze; bei außergewöhnlich vielen Startkarten notfalls entsprechend skalieren.
-- Individuelle Kartenhäufigkeiten werden nachvollziehbar validiert; ungültige oder zu kleine Konfigurationen werden abgelehnt statt stillschweigend durch Standardwerte ersetzt.
-- Nachmischen stellt den verdeckten Zustand wieder her und hält die oberste Ablagekarte offen.
-- Wiederholte Mehrfachablage im selben Zug verhindert, fehlgeschlagene Ablage beendet den Zug, unbegrenzte Mehrfachablage funktioniert auch oberhalb acht Karten.
-- Automatische Tests für Kartensatz, Kartenzug, Ablageregeln, Einzel-/Mehrfachtausch, Strafkarten, Stapelende, Konfigurationsgrenzen.
+- Fähigkeiten 7–12 über ein einheitliches Zustandsmodell inklusive spezieller Timerpause, optionaler/pflichtiger Aktionen und erweiterter Mehrfachkartenaktionen vereinheitlicht.
+- Anfangsblick bleibt offen, bis die Karte ausdrücklich geschlossen wird; andere Spieler bekommen keine Zielkarten-Indizes.
+- CABO-Schlusszüge je Gegenspieler sowie Punktegrenzen und Stichrunden nochmals abgesichert.
+- Wiederbeitrittsidentitäten durch private Sitzungsschlüssel geschützt, alte WebRTC-Verbindungen können keine Aktionen mehr auslösen.
+- Gastgeber kann die Partie bei **freiwilligem Verlassen** an den am längsten anwesenden verbundenen aktiven Spieler übergeben. Nur dem **neuen Gastgeber** wird während der Übergabe der vollständige geheime Zustand übermittelt.
+- Pausieren/Entfernen löst ausstehende Kartenaktionen regelkonform auf und erhält die Zugreihenfolge soweit möglich.
+- Erinnerungen nach 60 Sekunden und Gastgeber-Eingriffsoptionen nach 90 Sekunden eingebaut.
 
 ## Nächster konkreter Schritt
 
-**Bereich 2 – Spezialfähigkeiten** vollständig durchgehen, private Sichtbarkeit und Pflichtaktionen korrigieren, Tests für alle 7/8/9/10/11/12-Sonderfälle ergänzen; erst danach Bereich 3.
+**Bereich 5 und 6 vervollständigen:** zuverlässiger Wiederbeitritt, Client-Synchronisation unter echten PeerJS-Verbindungsabbrüchen, Migration beim unerwarteten Hostverlust. Anschließend Schritt 8 und 9 mit durchgehenden Integrationstests.
 
-**Hinweis:** ✅ bedeutet hier nicht, dass bereits eine komplette Multiplayer-Partie auf echten Geräten abgenommen wurde. Diese Prüfung ist explizit Schritt 9. Gesamte Funktionsentwicklung ist noch nicht fertig.
+**Technische Einschränkung:** Eine garantiert geheime und zugleich absturzsichere automatische Wiederherstellung des vollständigen Kartenzustands ist in reinem Peer-to-Peer-Hosting ohne vertrauenswürdigen externen Speicher nicht trivial. Beim freiwilligen Wechsel erhält der übernehmende Gastgeber den vollständigen Zustand. Ein unerwarteter Hostverlust ist daher noch **nicht** als abgeschlossen zu werten.
+
+✅ bezieht sich ausdrücklich auf die geprüfte lokale Regellogik; **Gesamtprojekt nicht fertig**.
