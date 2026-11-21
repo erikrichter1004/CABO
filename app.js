@@ -211,13 +211,58 @@ function endAbility(id){
  delete abilities[id];state.abilityActive=null;state.abilityPauseAt=null;completeTurn(id);
 }
 function completeTurn(id){if(state.cabo)nextTurn();else state.caboEligible=id}
+function settlePendingDraw(id,drawOnTimeout=false){
+ const player=state.players.find(p=>p.id===id),card=pending[id];
+ if(card){
+  if(card.source==="discard"&&player?.hand.length){
+   const old=player.hand[0];player.hand[0]={v:card.v,up:state.settings.faceUp};
+   state.discard.push({...old,up:true});
+  }else state.discard.push({...card,up:true,source:undefined});
+  delete pending[id];
+ }else if(drawOnTimeout&&state.deck.length)state.discard.push({...state.deck.pop(),up:true});
+}
 function requiredPlayers(){return state.players.filter(p=>!p.paused&&(!state.tiebreak||state.tiebreak.ids.includes(p.id)))}
 function advanceWaitingPhase(){
  if(!["peeking","reveal"].includes(state.stage)||!requiredPlayers().length||!requiredPlayers().every(p=>state.ready.includes(p.id)))return;
  if(state.stage==="peeking"){state.stage="playing";state.ready=[];state.turnStart=Date.now()}
  else setupRound();
 }
-function apply(id,a){if(!isHost||!a||typeof a!=="object")return;const p=state.players.find(x=>x.id===id);if(!p)return;if(a.type==="remove"&&id===state.host){const index=state.players.findIndex(x=>x.id===a.id);if(index>=0&&a.id!==id){const target=state.players[index];connections.get(target.id)?.close();connections.delete(target.id);state.players.splice(index,1);if(state.turn>=state.players.length)state.turn=0;if(state.stage==="playing"&&state.players.length<2){state.stage="finished";state.winner=state.players[0]?.id||null}else if(state.stage==="playing"&&state.players[state.turn]?.id===target.id)nextTurn();broadcast()}return}if(a.type==="pause"&&id===state.host){const target=state.players.find(x=>x.id===a.id);if(target&&target.id!==id){target.paused=!target.paused;if(target.paused&&state.players[state.turn]?.id===target.id&&state.stage==="playing")nextTurn();if(state.stage==="peeking"||state.stage==="reveal")advanceWaitingPhase()}broadcast();return}
+function apply(id,a){
+ if(!isHost||!a||typeof a!=="object")return;
+ const p=state.players.find(x=>x.id===id);if(!p)return;
+ if(a.type==="remove"&&id===state.host){
+  const index=state.players.findIndex(x=>x.id===a.id);
+  if(index<0||a.id===id)return;
+  const target=state.players[index],currentId=state.players[state.turn]?.id,wasCurrent=currentId===target.id;
+  if(wasCurrent)settlePendingDraw(target.id);
+  connections.get(target.id)?.close();connections.delete(target.id);
+  state.players.splice(index,1);
+  delete pending[target.id];delete privatePeeks[target.id];delete abilities[target.id];delete playerSecrets[target.id];
+  if(state.peeks)delete state.peeks[target.id];
+  if(state.ready)state.ready=state.ready.filter(x=>x!==target.id);
+  if(state.caboRemaining)delete state.caboRemaining[target.id];
+  if(state.cabo===target.id){state.cabo=null;state.caboRemaining={};state.lastTurns=0}
+  else state.lastTurns=Object.values(state.caboRemaining||{}).reduce((a,b)=>a+b,0);
+  if(state.tiebreak){state.tiebreak.ids=state.tiebreak.ids.filter(x=>x!==target.id);
+   if(state.tiebreak.ids.length===1){state.stage="finished";state.winner=state.tiebreak.ids[0];state.tiebreak=null}}
+  if(state.players.length<2){state.stage="finished";state.winner=state.players[0]?.id||null}
+  else if(state.stage==="playing"){
+   if(wasCurrent){state.turn=(index-1+state.players.length)%state.players.length;nextTurn(true)}
+   else state.turn=state.players.findIndex(x=>x.id===currentId);
+  }else if(state.stage==="peeking"||state.stage==="reveal")advanceWaitingPhase();
+  broadcast();return;
+ }
+ if(a.type==="pause"&&id===state.host){
+  const target=state.players.find(x=>x.id===a.id);
+  if(target&&target.id!==id){
+   target.paused=!target.paused;
+   if(target.paused&&state.players[state.turn]?.id===target.id&&state.stage==="playing"){
+    settlePendingDraw(target.id);nextTurn();
+   }
+   if(state.stage==="peeking"||state.stage==="reveal")advanceWaitingPhase();
+  }
+  broadcast();return;
+ }
 if(a.type==="start"&&id===state.host&&state.stage==="lobby"&&state.players.length>=2){const error=validateSettings(state.settings,state.players.length);if(error){note(error);return}state.started=true;setupRound();broadcast();return}
 if(a.type==="reset"&&id===state.host&&state.stage==="finished"){for(const x of state.players){x.score=0;x.rescued=false}state.round=0;state.tiebreak=null;state.winner=null;state.lastResult=[];setupRound();broadcast();return}
 if(a.type==="initialPeek"&&state.stage==="peeking"){if(p.paused||(state.tiebreak&&!state.tiebreak.ids.includes(id))||state.ready.includes(id)||privatePeeks[id])return;const i=Number(a.index),seen=state.peeks[id]||[];if(Number.isInteger(i)&&i>=0&&i<p.hand.length&&seen.length<(state.tiebreak?2:state.settings.peeks)&&!seen.includes(i)){state.peeks[id]=[...seen,i];privatePeeks[id]={index:i,value:p.hand[i].v};broadcast()}return}if(a.type==="closeInitialPeek"&&state.stage==="peeking"){if(privatePeeks[id]){delete privatePeeks[id];broadcast()}return}if(a.type==="donePeek"&&state.stage==="peeking"){if(p.paused||(state.tiebreak&&!state.tiebreak.ids.includes(id))||privatePeeks[id])return;if((state.peeks[id]||[]).length<Math.min((state.tiebreak?2:state.settings.peeks),p.hand.length))return;if(!state.ready.includes(id))state.ready.push(id);delete privatePeeks[id];advanceWaitingPhase();broadcast();return}if(a.type==="forcePeek"&&state.stage==="peeking"&&id===state.host&&Date.now()-(state.peekStart||Date.now())>=90000){
@@ -315,17 +360,7 @@ function tick(){
  if(t<=0&&!abilities[actingId]){
   const active=state.players[state.turn];
   if(state.caboEligible===active.id)nextTurn();
-  else{
-   if(pending[active.id]){
-    if(pending[active.id].source==="discard"){
-     const old=active.hand[0];
-     if(old){active.hand[0]={v:pending[active.id].v,up:state.settings.faceUp};state.discard.push({...old,up:true})}
-     else state.discard.push({...pending[active.id],up:true});
-    }else state.discard.push({...pending[active.id],up:true});
-    delete pending[active.id];
-   }else if(state.deck.length)state.discard.push({...state.deck.pop(),up:true});
-   nextTurn();
-  }
+  else{settlePendingDraw(active.id,true);nextTurn()}
   broadcast();
  }
 }
