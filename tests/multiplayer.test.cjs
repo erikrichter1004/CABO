@@ -147,11 +147,15 @@ async function main(){
  assert.equal(a.view().cabo,null);
  console.log("PASS outdated network action is rejected and does not change the turn");
 
+ c.act({type:"draw",source:"deck"});await settle();
+ const cDrawBeforeDisconnect=c.evaluate("drawn?.v");
+ assert.equal(typeof cDrawBeforeDisconnect,"number");
  c.evaluate("hostConn.close()");await settle();
  assert.equal(a.view().players[2].connected,false);
  await c.runTimers(2500);await settle();
  assert.equal(a.view().players[2].connected,true);
  assert.equal(c.view().revision,a.view().revision);
+ assert.equal(c.evaluate("drawn?.v"),cDrawBeforeDisconnect);
  assert.equal(a.view().players.length,3);
  console.log("PASS guest can disconnect and automatically rejoin without a duplicate seat");
 
@@ -165,7 +169,11 @@ async function main(){
  assert.equal(c.view().host,b.identity);
  assert.equal(c.view().revision,b.view().revision);
  assert.equal(c.view().players.length,3);
- console.log("PASS voluntary host handoff preserves room, scores and remaining guest connections");
+ assert.equal(c.evaluate("drawn?.v"),cDrawBeforeDisconnect);
+ c.act({type:"swapDraw",index:0});await settle();
+ assert.equal(c.evaluate("drawn"),null);
+ assert.equal(c.view().revision,b.view().revision);
+ console.log("PASS voluntary host handoff preserves room, private pending draw and remaining guest connections");
  console.log("PASS "+eventsSent+" simulated WebRTC messages exchanged");
 }
 main().catch(err=>{console.error(err);process.exitCode=1});
