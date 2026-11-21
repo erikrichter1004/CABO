@@ -1,0 +1,20 @@
+name: CABO real-browser checks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser test tool
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: Desktop, mobile and offline PWA tests
+        run: npm run test:browser
