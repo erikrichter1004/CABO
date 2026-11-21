@@ -1,19 +1,34 @@
 "use strict";
-const $=id=>document.getElementById(id),app=$("app");let peer=null,hostConn=null,connections=new Map(),state=null,identity=sessionStorage.getItem("caboIdentity")||crypto.randomUUID(),room=sessionStorage.getItem("caboRoom")||"",isHost=false,selected=[],drawn=null,peek=null,phase="home",ticker=null;
-sessionStorage.setItem("caboIdentity",identity);
+// Persistent per-device game state survives full browser/PWA restarts when storage is available.
+const gameStore={
+ getItem(key){
+  try{const current=sessionStorage.getItem(key);if(current!==null)return current}catch{}
+  try{return localStorage.getItem(key)}catch{return null}
+ },
+ setItem(key,value){
+  try{localStorage.setItem(key,String(value))}catch{}
+  try{sessionStorage.setItem(key,String(value))}catch{}
+ },
+ removeItem(key){
+  try{localStorage.removeItem(key)}catch{}
+  try{sessionStorage.removeItem(key)}catch{}
+ }
+};
+const $=id=>document.getElementById(id),app=$("app");let peer=null,hostConn=null,connections=new Map(),state=null,identity=gameStore.getItem("caboIdentity")||crypto.randomUUID(),room=gameStore.getItem("caboRoom")||"",isHost=false,selected=[],drawn=null,peek=null,phase="home",ticker=null;
+gameStore.setItem("caboIdentity",identity);
 const defaults={cards:4,peeks:2,turnsAfterCabo:1,limit:100,roundLimit:10,endMode:"points",failure:"medium",faceUp:false,reshuffle:true,multiLimit:8,abilityOwn:true,abilityOpponent:true,abilitySwap:true,abilityMode:"classic",abilityMandatory:false,exactRescue:true,kamikaze:true,startMode:"rotate",timeout:60,customCounts:""};
 let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0,reconnectTimer=null,hostResumeRetries=0;
-let resumeSecret=sessionStorage.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={},handoffTarget=null,pendingHandoff=null,handoffTimeout=null;
-sessionStorage.setItem("caboResumeSecret",resumeSecret);
-let actionSequence=Number(sessionStorage.getItem("caboActionSequence")||0);
+let resumeSecret=gameStore.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={},handoffTarget=null,pendingHandoff=null,handoffTimeout=null;
+gameStore.setItem("caboResumeSecret",resumeSecret);
+let actionSequence=Number(gameStore.getItem("caboActionSequence")||0);
 const clean=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function note(msg){const n=$("notice");n.textContent=msg;n.classList.add("show");clearTimeout(note.t);note.t=setTimeout(()=>n.classList.remove("show"),6000)}
 function setPhase(p){phase=p;render()}
 function home(){
  intentionalClose=true;hostResumeRetries=0;if(handoffTimeout){clearTimeout(handoffTimeout);handoffTimeout=null}
  handoffTarget=null;pendingHandoff=null;
- sessionStorage.removeItem("caboHostSnapshot");closeNet();state=null;room="";
- sessionStorage.removeItem("caboRoom");setPhase("home");
+ gameStore.removeItem("caboHostSnapshot");closeNet();state=null;room="";
+ gameStore.removeItem("caboRoom");setPhase("home");
 }
 function leaveRoom(){
  if(!isHost||!state){home();return}
@@ -31,14 +46,14 @@ function closeNet(){
  try{hostConn?.close();for(const c of connections.values())c.close();peer?.destroy()}catch{}
  hostConn=null;connections.clear();peer=null;isHost=false;
 }
-function nameField(){return '<label>Dein Spielername<input id="playerName" maxlength="24" value="'+clean(sessionStorage.getItem("caboName")||"")+'" placeholder="Name"></label>'}
-function takeName(){const n=$("playerName")?.value.trim();if(!n){note("Bitte Namen eingeben.");return null}sessionStorage.setItem("caboName",n);return n}
+function nameField(){return '<label>Dein Spielername<input id="playerName" maxlength="24" value="'+clean(gameStore.getItem("caboName")||"")+'" placeholder="Name"></label>'}
+function takeName(){const n=$("playerName")?.value.trim();if(!n){note("Bitte Namen eingeben.");return null}gameStore.setItem("caboName",n);return n}
 function optionsUI(){const choices=(key,label,values)=>'<label>'+label+'<select data-option="'+key+'">'+values.map(([v,t])=>'<option value="'+v+'" '+(String(opts[key])===String(v)?"selected":"")+'>'+t+'</option>').join("")+'</select></label>';return '<div class="settings">'+[
 choices("cards","Startkarten",[[3,3],[4,4],[5,5],[6,6],[7,7],[8,8]]),choices("peeks","Anfangsblick",[[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[7,7],[8,8]]),choices("turnsAfterCabo","Letzte Züge nach CABO",[[0,0],[1,1],[2,2],[3,3]]),choices("endMode","Spielende",[["points","Punktegrenze"],["rounds","Rundenzahl"]]),choices("limit","Punktegrenze",[[50,50],[75,75],[100,100],[150,150],[200,200]]),choices("roundLimit","Rundenanzahl",[[5,5],[10,10],[15,15],[20,20]]),choices("failure","Fehler beim Mehrfachablegen",[["light","Zug endet"],["medium","+1 Karte"],["hard","+1 Karte je Fehler"]]),choices("faceUp","Eingetauschte Karten",[["false","Verdeckt"],["true","Offen"]]),choices("reshuffle","Leerer Nachziehstapel",[["true","Ablagestapel mischen"],["false","Runde beenden"]]),choices("multiLimit","Max. Mehrfachablage",[[2,2],[3,3],[4,4],[5,5],[6,6],[7,7],[8,"Unbegrenzt"]]),choices("abilityOwn","7/8 Eigene Karte ansehen",[["true","An"],["false","Aus"]]),choices("abilityOpponent","9/10 Gegnerkarte ansehen",[["true","An"],["false","Aus"]]),choices("abilitySwap","11/12 Karten tauschen",[["true","An"],["false","Aus"]]),choices("abilityMode","Spezialfähigkeiten",[["classic","Nur direkt gezogene Karte"],["extended","Auch aus eigener Hand"]]),choices("abilityMandatory","Fähigkeiten verpflichtend",[["false","Nein"],["true","Ja"]]),choices("exactRescue","100 → 50 Rettung",[["true","An"],["false","Aus"]]),choices("kamikaze","Kamikaze 12/12/13/13",[["true","An"],["false","Aus"]]),choices("startMode","Startspieler",[["rotate","Rotierend"],["same","Immer gleich"],["random","Zufällig"]])].join("")+'</div><label>Eigene Kartenhäufigkeiten 0–13 (14 Zahlen, Komma-getrennt, optional)<input id="customCounts" placeholder="4,4,4,4,4,4,4,4,4,4,4,4,4,2" value="'+clean(opts.customCounts||"")+'"></label>'}
 function readOptions(){opts.customCounts=$("customCounts")?.value.trim()||"";document.querySelectorAll("[data-option]").forEach(e=>{let v=e.value;opts[e.dataset.option]=v==="true"?true:v==="false"?false:/^\d+$/.test(v)?Number(v):v})}
 function render(){if(phase==="home"){
- const savedHost=sessionStorage.getItem("caboHostSnapshot");
- const lastRoom=sessionStorage.getItem("caboRoom"),lastName=sessionStorage.getItem("caboName");
+ const savedHost=gameStore.getItem("caboHostSnapshot");
+ const lastRoom=gameStore.getItem("caboRoom"),lastName=gameStore.getItem("caboName");
  app.innerHTML='<div class="panel"><div class="actions"><button id="create">Neue Partie erstellen</button><button id="join">Raum beitreten</button>'
  +(savedHost?'<button id="resume">Gastgeber-Partie fortsetzen</button>':'')
  +(!savedHost&&/^[0-9]{4}$/.test(lastRoom||"")&&lastName?'<button id="rejoin">Letzter Partie wieder beitreten ('+clean(lastRoom)+')</button>':'')
@@ -80,7 +95,7 @@ function newState(n){return {host:identity,players:[{id:identity,name:n,score:0,
 function peerId(c){return "cabo-online-v1-"+c}
 function createRoom(n,resume=false,fromHandoff=false){
  intentionalClose=true;closeNet();intentionalClose=false;isHost=true;handoffTarget=null;
- const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;
+ const snapshot=resume?gameStore.getItem("caboHostSnapshot"):null;
  if(snapshot){
   try{
    const saved=JSON.parse(snapshot);
@@ -105,8 +120,8 @@ function createRoom(n,resume=false,fromHandoff=false){
   playerSecrets={};pending={};privatePeeks={};abilities={};
  }
  playerSecrets[identity]=resumeSecret;
- sessionStorage.setItem("caboName",String(n||"Gastgeber").slice(0,24));
- sessionStorage.setItem("caboRoom",room);setPhase("connecting");
+ gameStore.setItem("caboName",String(n||"Gastgeber").slice(0,24));
+ gameStore.setItem("caboRoom",room);setPhase("connecting");
  const epoch=netEpoch;
  peer=new Peer(peerId(room));
  peer.on("open",()=>{if(epoch!==netEpoch)return;hostResumeRetries=0;setPhase("game");broadcast()});
@@ -150,8 +165,8 @@ function promoteHandoff(snapshot){
  saved.state.host=identity;
  const previous=saved.state.players.find(p=>p.id===previousHost);
  if(previous){previous.connected=false;previous.paused=true;previous.disconnectedAt=Date.now()}
- sessionStorage.setItem("caboHostSnapshot",JSON.stringify(saved));
- createRoom(sessionStorage.getItem("caboName")||"Gastgeber",true,true);
+ gameStore.setItem("caboHostSnapshot",JSON.stringify(saved));
+ createRoom(gameStore.getItem("caboName")||"Gastgeber",true,true);
  if(state.stage==="playing"&&state.players[state.turn]?.id===previousHost){
   settlePendingDraw(previousHost);nextTurn(true);
  }
@@ -171,7 +186,7 @@ function scheduleReconnect(n,c,epoch){
 function joinRoom(n,c){
  intentionalClose=true;closeNet();intentionalClose=false;
  const epoch=netEpoch;
- room=c;sessionStorage.setItem("caboRoom",c);sessionStorage.setItem("caboName",String(n||"Gast").slice(0,24));isHost=false;setPhase("connecting");
+ room=c;gameStore.setItem("caboRoom",c);gameStore.setItem("caboName",String(n||"Gast").slice(0,24));isHost=false;setPhase("connecting");
  peer=new Peer();
  peer.on("open",()=>{
   if(epoch!==netEpoch)return;
@@ -253,13 +268,13 @@ function sendAction(action){
  else if(isHost)note("Gastgeber ist noch nicht mit dem Raum verbunden.");
  else if(hostConn?.open&&state){
   const sequence=++actionSequence;
-  sessionStorage.setItem("caboActionSequence",String(sequence));
+  gameStore.setItem("caboActionSequence",String(sequence));
   hostConn.send({type:"action",action,revision:state.revision||0,sequence});
  }else note("Keine Verbindung zum Gastgeber.");
 }
 function privateState(id){const copy=structuredClone(state);delete copy.lastClientSeq;for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
 function sendStateTo(id,conn){if(conn?.open)conn.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null})}
-function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets,savedAt:Date.now()}))}catch{}for(const [id,c] of connections)sendStateTo(id,c);const own=privateState(identity);stateView=own;renderHost()}
+function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{gameStore.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets,savedAt:Date.now()}))}catch{}for(const [id,c] of connections)sendStateTo(id,c);const own=privateState(identity);stateView=own;renderHost()}
 let stateView=null,pending={},privatePeeks={},abilities={},abilityView=null;
 function renderHost(){const full=state;state=stateView;drawn=pending[identity]||null;peek=privatePeeks[identity]||null;abilityView=abilities[identity]||null;render();state=full}
 function validateSettings(settings,playerCount=2){
