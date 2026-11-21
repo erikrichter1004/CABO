@@ -139,6 +139,15 @@ async function main(){
  assert.equal(a.view().revision,b.view().revision);
  assert.equal(b.view().revision,c.view().revision);
  console.log("PASS turns and private deck draws stay in sync on all three clients");
+ const staleSnapshot=c.view();
+ a.evaluate("broadcast()");await settle();
+ const newerRevision=c.view().revision;
+ c.ctx.__oldState=staleSnapshot;
+ c.evaluate('hostConn.emit("data",{type:"state",state:__oldState})');
+ delete c.ctx.__oldState;
+ assert.equal(c.view().revision,newerRevision);
+ assert.equal(turnOf(c),turnOf(a));
+ console.log("PASS out-of-order older host snapshots cannot rewind the client's turn");
 
  const revision=a.view().revision;
  b.ctx.__stale={type:"action",revision:revision-1,sequence:999,action:{type:"cabo"}};
