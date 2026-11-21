@@ -65,7 +65,55 @@ if($("closePeek"))$("closePeek").onclick=()=>{peek=null;render()};
 function bindCommon(){document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{if(confirm("Spieler dauerhaft entfernen?"))sendAction({type:"remove",id:b.dataset.remove})});document.querySelectorAll("[data-pause]").forEach(b=>b.onclick=()=>sendAction({type:"pause",id:b.dataset.pause}));if($("leave"))$("leave").onclick=leaveRoom}
 function newState(n){return {host:identity,players:[{id:identity,name:n,score:0,hand:[],paused:false,rescued:false,connected:true}],settings:{...opts},started:false,stage:"lobby",round:0,turn:0,deck:[],discard:[],cabo:null,lastTurns:0,turnStart:Date.now(),starter:0}}
 function peerId(c){return "cabo-online-v1-"+c}
-function createRoom(n,resume=false){intentionalClose=true;closeNet();intentionalClose=false;isHost=true;const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;if(snapshot){try{const saved=JSON.parse(snapshot);room=saved.room;state=saved.state;pending=saved.pending||{};privatePeeks=saved.privatePeeks||{};abilities=saved.abilities||{};playerSecrets=saved.secrets||{}}catch{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}}else{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}playerSecrets[identity]=resumeSecret;sessionStorage.setItem("caboRoom",room);setPhase("connecting");peer=new Peer(peerId(room));peer.on("open",()=>{setPhase("game");broadcast()});peer.on("connection",conn=>{conn.on("data",msg=>receive(conn,msg));conn.on("close",()=>{if(conn.playerId&&connections.get(conn.playerId)===conn){connections.delete(conn.playerId);const p=state?.players.find(x=>x.id===conn.playerId);if(p){p.connected=false;p.disconnectedAt=Date.now()}broadcast()}});conn.on("open",()=>{})});peer.on("error",e=>{note("Verbindung fehlgeschlagen: "+e.type);if(e.type==="unavailable-id"){room=String(Math.floor(1000+Math.random()*9000));peer.destroy();createRoom(n)}})}
+function createRoom(n,resume=false,fromHandoff=false){
+ intentionalClose=true;closeNet();intentionalClose=false;isHost=true;handoffTarget=null;
+ const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;
+ if(snapshot){
+  try{
+   const saved=JSON.parse(snapshot);room=saved.room;state=saved.state;
+   pending=saved.pending||{};privatePeeks=saved.privatePeeks||{};
+   abilities=saved.abilities||{};playerSecrets=saved.secrets||{};
+  }catch{room=String(Math.floor(1000+Math.random()*9000));state=newState(n);playerSecrets={}}
+ }else{
+  room=String(Math.floor(1000+Math.random()*9000));state=newState(n);
+  playerSecrets={};pending={};privatePeeks={};abilities={};
+ }
+ playerSecrets[identity]=resumeSecret;
+ sessionStorage.setItem("caboRoom",room);setPhase("connecting");
+ const epoch=netEpoch;
+ peer=new Peer(peerId(room));
+ peer.on("open",()=>{if(epoch!==netEpoch)return;setPhase("game");broadcast()});
+ peer.on("connection",conn=>{
+  if(epoch!==netEpoch){conn.close();return}
+  conn.on("data",msg=>{if(epoch===netEpoch)receive(conn,msg)});
+  conn.on("close",()=>{
+   if(epoch!==netEpoch)return;
+   if(conn.playerId&&connections.get(conn.playerId)===conn){
+    connections.delete(conn.playerId);
+    const player=state?.players.find(x=>x.id===conn.playerId);
+    if(player){player.connected=false;player.disconnectedAt=Date.now()}
+    broadcast();
+   }
+  });
+ });
+ peer.on("error",e=>{
+  if(epoch!==netEpoch)return;
+  if(e.type==="unavailable-id"){
+   if(fromHandoff){
+    note("Gastgeberwechsel läuft. Raumcode wird erneut beansprucht.");
+    setTimeout(()=>{if(epoch===netEpoch&&!intentionalClose)createRoom(n,true,true)},2000);
+   }else if(resume){
+    note("Der Raum wird bereits gehostet. Beitritt als Mitspieler wird versucht.");
+    joinRoom(n,room);
+   }else{
+    note("Raumcode vergeben, wähle automatisch einen neuen.");
+    createRoom(n,false);
+   }
+   return;
+  }
+  note("Spielserververbindung fehlgeschlagen: "+e.type);
+ });
+}
 function scheduleReconnect(n,c,epoch){
  if(intentionalClose||epoch!==netEpoch||reconnectTimer)return;
  reconnectAttempts++;
