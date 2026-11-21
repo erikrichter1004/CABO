@@ -237,4 +237,48 @@ async function recoveryScenario(){
  console.log("PASS crashed host can reclaim original room after PeerJS ID is released; guest rejoins");
  console.log("PASS resumed host freezes game clock through extended downtime");
 }
-main().then(recoveryScenario).catch(err=>{console.error(err);process.exitCode=1});
+async function automaticFailoverScenario(){
+ const a=client("auto-host-a-identity-0006"),b=client("auto-guest-b-identity-0007"),c=client("auto-guest-c-identity-0008");
+ a.evaluate("createRoom('A')");await settle();
+ const room=a.evaluate("room");
+ b.evaluate("joinRoom('B','"+room+"')");c.evaluate("joinRoom('C','"+room+"')");await settle();
+ assert.equal(a.view().players.length,3);
+ assert.equal(a.view().standby,b.identity);
+ assert.equal(b.evaluate("standbySnapshot?.state?.host"),a.identity);
+ assert.equal(c.evaluate("standbySnapshot"),null);
+ a.act({type:"start"});await settle();
+ for(const player of [a,b,c]){
+  for(const index of [0,1]){player.act({type:"initialPeek",index});await settle();player.act({type:"closeInitialPeek"});await settle()}
+  player.act({type:"donePeek"});await settle();
+ }
+ assert.equal(a.view().stage,"playing");
+ for(const player of [a,b]){
+  assert.equal(turnOf(a),player.identity);
+  player.act({type:"draw",source:"deck"});await settle();
+  player.act({type:"swapDraw",index:0});await settle();
+  player.act({type:"endTurn"});await settle();
+ }
+ assert.equal(turnOf(a),c.identity);
+ c.act({type:"draw",source:"deck"});await settle();
+ const drawnValue=c.evaluate("drawn.v"),scoresBefore=a.view().players.map(p=>p.score);
+ assert.equal(b.evaluate("standbySnapshot?.pending?.[\""+c.identity+"\"]?.v"),drawnValue);
+ a.evaluate("peer.destroy()");await settle();
+ assert.equal(b.evaluate("isHost"),true);
+ assert.equal(b.evaluate("room"),room);
+ assert.equal(b.view().host,b.identity);
+ assert.equal(b.view().players[0].paused,true);
+ assert.deepEqual(b.view().players.map(p=>p.score),scoresBefore);
+ assert.equal(b.evaluate("pending[\""+c.identity+"\"]?.v"),drawnValue);
+ await c.runTimers(2500);await settle();
+ assert.equal(c.view().host,b.identity);
+ assert.equal(c.view().revision,b.view().revision);
+ assert.equal(c.evaluate("drawn?.v"),drawnValue);
+ assert.equal(turnOf(c),c.identity);
+ c.act({type:"swapDraw",index:0});await settle();
+ assert.equal(c.evaluate("drawn"),null);
+ assert.equal(b.view().revision,c.view().revision);
+ assert.equal(b.evaluate("isHost"),true);
+ console.log("PASS unannounced host crash elects designated standby, preserves room, all secrets, pending draws, scores and current turn");
+ console.log("PASS remaining guest automatically reconnects and finishes draw under new host");
+}
+main().then(recoveryScenario).then(automaticFailoverScenario).catch(err=>{console.error(err);process.exitCode=1});
