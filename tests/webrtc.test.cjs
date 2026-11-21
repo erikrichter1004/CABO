@@ -75,6 +75,12 @@ async function exercise(hostEngine,guestEngine,name){
   await a.locator("#start").click();
   await a.locator('[data-peek="0"]').waitFor();
   await b.locator('[data-peek="0"]').waitFor();
+  for(const page of [a,b]){
+   assert.equal(await page.locator(".table-felt").count(),1,"virtual table missing");
+   assert.equal(await page.locator(".table-rival").count(),1,"other player not seated");
+   assert.equal(await page.locator(".table-rival-hand .table-card").count(),4,"opponent cards not visible");
+   assert.equal(await page.locator(".table-own-hand .table-card").count(),4,"own cards not visible");
+  }
   for(const p of [a,b]){
    for(const index of [0,1]){
     await p.locator('[data-peek="'+index+'"]').click();
@@ -82,6 +88,12 @@ async function exercise(hostEngine,guestEngine,name){
     await p.locator("#closeInitialPeek").click();
    }
    await p.locator("#donePeek").click();
+  }
+  for(const page of [a,b]){
+   assert.equal(await page.locator(".table-rival").count(),1);
+   assert.equal(await page.locator(".table-own-hand .table-card").count(),4);
+   assert.equal(await page.locator(".table-center #deck").count(),1);
+   assert.equal(await page.locator(".table-center #takeDiscard").count(),1);
   }
   await a.locator("#deck").waitFor();
   await a.locator("#deck").click();
