@@ -17,3 +17,5 @@ jobs:
         run: node -e "const m=JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); if(!m.icons?.length || !m.start_url) process.exit(1)"
       - name: Rule regression tests
         run: node tests/rules.test.cjs
+      - name: Simulated multi-client integration
+        run: node tests/multiplayer.test.cjs
