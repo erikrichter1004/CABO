@@ -13,3 +13,5 @@ jobs:
           node-version: '22'
       - name: JavaScript syntax
         run: node --check app.js
+      - name: Rule regression tests
+        run: node tests/rules.test.cjs
