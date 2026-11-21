@@ -18,3 +18,5 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: Desktop, mobile and offline PWA tests
         run: npm run test:browser
+      - name: Genuine PeerJS WebRTC browser data-channel integration
+        run: npm run test:webrtc
