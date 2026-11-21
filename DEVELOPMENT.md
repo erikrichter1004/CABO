@@ -41,6 +41,7 @@
 - 84 automatische Regel- und Stresstests, einschließlich 2–8 Spielenden und konsistentem Kartenbestand.
 - Drei vollständig getrennte simulierte Browser-Clients tauschen echte simulierte Datenkanal-Nachrichten aus: Zugwechsel, private Karten, Anfangsblick, Wiederverbindung, freiwilliger Hostwechsel.
 - Überraschender Hostausfall **mit anschließender Wiederherstellung durch den ursprünglichen Gastgeber** getestet: dieselbe Raumkennung, kurzzeitig blockierte Peer-ID, gefrorene Zugzeit und erneuter Beitritt der Mitspieler.
+- Lokale Wiederherstellung über dauerhaft gespeicherte Raumkennung, Spieleridentität und private Sitzungsschlüssel. Der Gastgeber speichert zusätzlich den vollständigen letzten Spielzustand im Browser; sofern dauerhafter Speicher blockiert wird, bleibt der Sitzungs-Speicher als Fallback.
 - GitHub Actions prüft Code-Syntax, PWA-Manifest, Regeltests und Mehrclient-Simulation bei jedem Push.
 
 **Technische Einschränkung:** Eine garantiert geheime und zugleich absturzsichere automatische Wiederherstellung des vollständigen Kartenzustands ist in reinem Peer-to-Peer-Hosting ohne vertrauenswürdigen externen Speicher nicht trivial. Beim freiwilligen Wechsel erhält der übernehmende Gastgeber den vollständigen Zustand. Ein unerwarteter Hostverlust ist daher noch **nicht** als abgeschlossen zu werten.
