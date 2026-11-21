@@ -350,12 +350,13 @@ async function completeGameScenario(){
  a.evaluate('opts={...defaults,endMode:"rounds",roundLimit:3,cards:4,peeks:2,turnsAfterCabo:1,abilityMode:"classic",abilityMandatory:false}');
  a.evaluate("createRoom('A')");await settle();
  const room=a.evaluate("room");
- b.evaluate("joinRoom('B',"+JSON.stringify(room)+")"); // replaced below
+ b.evaluate("joinRoom('B',"+JSON.stringify(room)+")");
  c.evaluate("joinRoom('C',"+JSON.stringify(room)+")");
  await settle();
  const participants=[a,b,c],byId=new Map(participants.map(p=>[p.identity,p]));
  assert.equal(a.view().players.length,3);
- let previousScores=[0,0,0],totalTurns=0;
+ a.act({type:"start"});await settle();
+ let previousScores=[0,0,0],previousRescued=[false,false,false],totalTurns=0;
  for(let round=1;round<=3;round++){
   assert.equal(a.view().stage,"peeking");
   assert.equal(a.view().round,round);
@@ -386,16 +387,18 @@ async function completeGameScenario(){
    }
    if(a.view().stage==="reveal")break;
   }
-  assert.equal(a.view().stage,"reveal","CABO final turns must score round");
+  assert.ok(["reveal","finished"].includes(a.view().stage),"CABO final turns must score round");
   const latest=a.view();
   assert.equal(latest.lastResult.length,3);
   for(const [i,p] of latest.players.entries()){
    assert.equal(p.hand.every(card=>card.up&&Number.isInteger(card.v)),true);
-   assert.equal(p.score,previousScores[i]+latest.lastResult[i].points===100&&latest.settings.exactRescue&&!p.rescued ? 50 : p.score);
+   let expected=previousScores[i]+latest.lastResult[i].points;
+   if(latest.settings.exactRescue&&expected===100&&!previousRescued[i])expected=50;
+   assert.equal(p.score,expected,"round "+round+" total for "+p.name);
   }
   const scores=latest.players.map(p=>p.score);
   assert.equal(participants.every(p=>p.view().players.every((x,i)=>x.score===scores[i])),true);
-  previousScores=scores;
+  previousScores=scores;previousRescued=latest.players.map(p=>!!p.rescued);
   if(round<3){
    for(const p of participants){p.act({type:"ready"});await settle()}
    assert.equal(a.view().stage,"peeking");
