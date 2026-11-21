@@ -1,4 +1,4 @@
-# CABO Online – Entwicklungsstand
+# CABO Online – technische Funktionsentwicklung abgeschlossen
 
 Installierbare statische Web-App auf GitHub Pages. Kommunikation der Spieler über PeerJS/WebRTC; für die Vermittlung wird ein **externer öffentlicher PeerJS-Signalisierungsdienst** verwendet. Es gibt keinen selbst verwalteten Backend-Server. Die Synchronisierung erfolgt **ereignisbasiert**, nicht durch periodisches Abfragen.
 
@@ -14,12 +14,13 @@ Installierbare statische Web-App auf GitHub Pages. Kommunikation der Spieler üb
 - Individuelle Kartenhäufigkeiten mit Prüfung der Eingaben; sonst 52er-Standardstapel, für größere Runden skaliert
 
 ## Ausfallsicherung und verbleibende Einschränkungen
-- **Automatischer Hostwechsel:** Implementiert und in zwei- sowie dreispielerigen WebRTC-Simulationen geprüft. Ein zuvor festgelegter Nachfolger übernimmt bei plötzlichem Hostabsturz unter demselben Raumcode. Reale Browser-/Gerätetests stehen noch aus.
+- **Automatischer Hostwechsel:** In simulierten Mehrspielerpartien und einem echten Chromium-WebRTC-Browsertest erfolgreich: Beim plötzlichen Schließen des Gastgeber-Browsers übernimmt der Nachfolger unter demselben Raumcode.
 - **Privatsphäre-Hinweis:** Der Reservegastgeber erhält vorab eine vollständige Kopie des aktuellen, auch geheimen Kartenzustands. Die Spieloberfläche zeigt ihm weiterhin nur erlaubte Karten, technisch könnte er jedoch versteckte Werte auslesen. In den Spieleinstellungen kann die automatische Übernahme deshalb abgeschaltet werden. Ohne verfügbare Reserveperson muss der bisherige Gastgeber seinen gespeicherten Spielstand wiederherstellen.
-- Abschließende Prüfung sämtlicher Regel-/Unterbrechungsfälle und der Verbindungsqualität in echten Browsern und auf mehreren Geräten
-- PWA-Installationsprüfung auf iOS/Android; das visuelle Design und die Animationen folgen erst nach Abschluss der Funktionen
+- **Automatisierte Browserabnahme abgeschlossen:** echte Chromium-/WebKit-Datenkanäle (auch browserübergreifend), geheime Karten, Zugwechsel, Wiederbeitritt nach Neuladen und Ausfallübernahme getestet. PWA-Manifest, PNG-Icons, Service Worker und Offline-App-Oberfläche geprüft.
+- **Offen als eigenständige manuelle Freigabe:** tatsächliche Installation auf physischen iPhone-/Android-Geräten, Mobilfunk/WLAN-Wechsel und iOS-Hintergrundverhalten. Diese Ergebnisse können ohne entsprechende Testgeräte nicht behauptet werden.
+- **Nächster Entwicklungsschritt:** visuelles Design und Animationen.
 
-**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 96 automatisierte Regel-/Stresstests und eine PeerJS-Mehrclient-Simulation bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
+**Stand:** Die vier vereinbarten technischen Entwicklungspakete sind implementiert und die automatisierten Prüfungen bestanden. GitHub Actions führt 96 Regel-/Stresstests, komplette Mehrclient-Spielsimulationen, Browser-/PWA-Checks und echte lokale PeerJS-WebRTC-Tests aus. Dies ist eine **automatisierte technische Freigabe**, keine bestätigte Geräteabnahme auf realen Smartphones. Die Nutzbarkeit unter sämtlichen Mobilfunk-/WLAN-Bedingungen ist damit nicht garantiert.
 
 Detaillierter Fortschritt: [DEVELOPMENT.md](DEVELOPMENT.md).
 
