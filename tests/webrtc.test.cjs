@@ -97,6 +97,32 @@ async function exercise(hostEngine,guestEngine,name){
   assert.deepEqual(host.pageErrors,[],"host script must have no uncaught errors");
   assert.deepEqual(guest.pageErrors,[],"guest script must have no uncaught errors");
   console.log("PASS "+name+": actual RTCPeerConnection and RTCDataChannel, room join, private peek/draw and shared turn; drawn card "+drawnValue);
+  // Reload an active guest while the guest has a private, not-yet-played draw.
+  await b.locator("#deck").click();
+  await b.waitForFunction(()=>drawn?.source==="deck");
+  const unfinishedValue=await b.evaluate(()=>drawn.v);
+  const guestId=await b.evaluate(()=>identity);
+  await b.reload({waitUntil:"domcontentloaded"});
+  await b.locator("#rejoin").waitFor({timeout:10000});
+  await b.locator("#rejoin").click();
+  await b.waitForFunction(value=>state?.stage==="playing"&&drawn?.v===value,unfinishedValue,{timeout:30000});
+  await a.waitForFunction(id=>state?.players.find(p=>p.id===id)?.connected===true,guestId,{timeout:30000});
+  assert.equal(await b.evaluate(()=>identity),guestId,"Guest identity must survive reload");
+  assert.equal(await a.evaluate(()=>state.revision),await b.evaluate(()=>state.revision),"Snapshots converge after reload");
+  await b.locator('[data-card="0"]').click();
+  await b.locator("#swapDraw").click();
+  await b.locator("#endTurn").click();
+  await a.waitForFunction(()=>state?.players[state.turn]?.name==="Host",{timeout:15000});
+  console.log("PASS "+name+": browser reload, authenticated rejoin and private pending draw preserved");
+  if(name==="Chromium ↔ Chromium"){
+   // A genuine host browser is closed without triggering the voluntary handoff UI.
+   await a.close();
+   await b.waitForFunction(()=>isHost&&peer?.open&&state?.host===identity,null,{timeout:40000});
+   assert.equal(await b.evaluate(()=>state.players.find(p=>p.name==="Host")?.paused),true);
+   assert.equal(await b.evaluate(()=>state.players.length),2);
+   assert.equal(await b.evaluate(()=>room),room);
+   console.log("PASS "+name+": sudden real-browser host loss and automatic takeover under unchanged room code");
+  }
  }finally{
   if(guest){await guest.context.close().catch(()=>{});await guest.browser.close().catch(()=>{})}
   if(host){await host.context.close().catch(()=>{});await host.browser.close().catch(()=>{})}
@@ -108,7 +134,7 @@ async function exercise(hostEngine,guestEngine,name){
  }
 }
 async function main(){
- const guard=setTimeout(()=>{console.error("WebRTC browser integration timed out after 90 seconds");process.exit(1)},90000);
+ const guard=setTimeout(()=>{console.error("WebRTC browser integration timed out after 170 seconds");process.exit(1)},170000);
  try{
  await exercise(chromium,chromium,"Chromium ↔ Chromium");
  await exercise(chromium,webkit,"Chromium ↔ WebKit");
