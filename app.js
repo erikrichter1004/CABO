@@ -5,6 +5,7 @@ const defaults={cards:4,peeks:2,turnsAfterCabo:1,limit:100,roundLimit:10,endMode
 let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0,reconnectTimer=null;
 let resumeSecret=sessionStorage.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={},handoffTarget=null,pendingHandoff=null,handoffTimeout=null;
 sessionStorage.setItem("caboResumeSecret",resumeSecret);
+let actionSequence=Number(sessionStorage.getItem("caboActionSequence")||0);
 const clean=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function note(msg){const n=$("notice");n.textContent=msg;n.classList.add("show");clearTimeout(note.t);note.t=setTimeout(()=>n.classList.remove("show"),6000)}
 function setPhase(p){phase=p;render()}
@@ -209,11 +210,29 @@ function receive(conn,msg){
   }
   broadcast();return;
  }
- if(msg.type==="action"&&conn.playerId&&connections.get(conn.playerId)===conn)apply(conn.playerId,msg.action);
+ if(msg.type==="action"&&conn.playerId&&connections.get(conn.playerId)===conn){
+  const id=conn.playerId,revision=Number(msg.revision),seq=Number(msg.sequence);
+  if(!Number.isInteger(revision)||revision!==(state.revision||0)||!Number.isSafeInteger(seq)||seq<=0||seq<=(state.lastClientSeq?.[id]||0)){
+   sendStateTo(id,conn);
+   return;
+  }
+  if(!state.lastClientSeq)state.lastClientSeq={};
+  state.lastClientSeq[id]=seq;
+  apply(id,msg.action);
+ }
 }
-function sendAction(action){if(isHost&&peer?.open)apply(identity,action);else if(isHost)note("Gastgeber ist noch nicht mit dem Raum verbunden.");else if(hostConn?.open)hostConn.send({type:"action",action});else note("Keine Verbindung zum Gastgeber.")}
-function privateState(id){const copy=structuredClone(state);for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
-function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets}))}catch{}for(const [id,c] of connections)if(c.open)c.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null});const own=privateState(identity);stateView=own;renderHost()}
+function sendAction(action){
+ if(isHost&&peer?.open)apply(identity,action);
+ else if(isHost)note("Gastgeber ist noch nicht mit dem Raum verbunden.");
+ else if(hostConn?.open&&state){
+  const sequence=++actionSequence;
+  sessionStorage.setItem("caboActionSequence",String(sequence));
+  hostConn.send({type:"action",action,revision:state.revision||0,sequence});
+ }else note("Keine Verbindung zum Gastgeber.");
+}
+function privateState(id){const copy=structuredClone(state);delete copy.lastClientSeq;for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
+function sendStateTo(id,conn){if(conn?.open)conn.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null})}
+function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets}))}catch{}for(const [id,c] of connections)sendStateTo(id,c);const own=privateState(identity);stateView=own;renderHost()}
 let stateView=null,pending={},privatePeeks={},abilities={},abilityView=null;
 function renderHost(){const full=state;state=stateView;drawn=pending[identity]||null;peek=privatePeeks[identity]||null;abilityView=abilities[identity]||null;render();state=full}
 function validateSettings(settings,playerCount=2){
@@ -334,7 +353,7 @@ function apply(id,a){
   if(wasCurrent)settlePendingDraw(target.id);
   connections.get(target.id)?.close();connections.delete(target.id);
   state.players.splice(index,1);
-  delete pending[target.id];delete privatePeeks[target.id];delete abilities[target.id];delete playerSecrets[target.id];
+  delete pending[target.id];delete privatePeeks[target.id];delete abilities[target.id];delete playerSecrets[target.id];if(state.lastClientSeq)delete state.lastClientSeq[target.id];
   if(state.peeks)delete state.peeks[target.id];
   if(state.ready)state.ready=state.ready.filter(x=>x!==target.id);
   if(state.caboRemaining)delete state.caboRemaining[target.id];
@@ -361,7 +380,7 @@ function apply(id,a){
   broadcast();return;
  }
 if(a.type==="start"&&id===state.host&&state.stage==="lobby"&&state.players.length>=2){const error=validateSettings(state.settings,state.players.length);if(error){note(error);return}state.started=true;setupRound();broadcast();return}
-if(a.type==="reset"&&id===state.host&&state.stage==="finished"){for(const x of state.players){x.score=0;x.rescued=false}state.round=0;state.tiebreak=null;state.winner=null;state.lastResult=[];setupRound();broadcast();return}
+if(a.type==="reset"&&id===state.host&&state.stage==="finished"){for(const x of state.players){x.score=0;x.rescued=false}state.round=0;state.tiebreak=null;state.winner=null;state.lastResult=[];state.lastClientSeq={};setupRound();broadcast();return}
 if(a.type==="initialPeek"&&state.stage==="peeking"){if(p.paused||(state.tiebreak&&!state.tiebreak.ids.includes(id))||state.ready.includes(id)||privatePeeks[id])return;const i=Number(a.index),seen=state.peeks[id]||[];if(Number.isInteger(i)&&i>=0&&i<p.hand.length&&seen.length<(state.tiebreak?2:state.settings.peeks)&&!seen.includes(i)){state.peeks[id]=[...seen,i];privatePeeks[id]={index:i,value:p.hand[i].v};broadcast()}return}if(a.type==="closeInitialPeek"&&state.stage==="peeking"){if(privatePeeks[id]){delete privatePeeks[id];broadcast()}return}if(a.type==="donePeek"&&state.stage==="peeking"){if(p.paused||(state.tiebreak&&!state.tiebreak.ids.includes(id))||privatePeeks[id])return;if((state.peeks[id]||[]).length<Math.min((state.tiebreak?2:state.settings.peeks),p.hand.length))return;if(!state.ready.includes(id))state.ready.push(id);delete privatePeeks[id];advanceWaitingPhase();broadcast();return}if(a.type==="forcePeek"&&state.stage==="peeking"&&id===state.host&&Date.now()-(state.peekStart||Date.now())>=90000){
   for(const player of requiredPlayers()){if(!state.ready.includes(player.id))state.ready.push(player.id);delete privatePeeks[player.id]}
   advanceWaitingPhase();broadcast();return;
