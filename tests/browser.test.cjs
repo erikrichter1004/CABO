@@ -33,6 +33,7 @@ async function browserCheck({name,engine,device}){
  const context=await browser.newContext({...device,serviceWorkers:"allow"});
  const page=await context.newPage(),errors=[];
  page.on("pageerror",e=>errors.push(e.message));
+ page.on("dialog",dialog=>dialog.accept());
  await page.route("https://unpkg.com/**",route=>route.fulfill({status:200,contentType:"text/javascript",body:peerStub}));
  try{
   await page.goto(globalThis.testURL,{waitUntil:"load",timeout:30000});
