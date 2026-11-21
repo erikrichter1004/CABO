@@ -57,7 +57,7 @@ function validateSettings(settings,playerCount=2){
  const text=String(settings.customCounts||"").trim();
  if(text){
   const raw=text.split(",").map(x=>x.trim());
-  if(raw.length!==14||raw.some(x=>!/^\\d+$/.test(x)))return "Eigene Kartenhäufigkeiten: bitte genau 14 ganze, nichtnegative Zahlen (0–13) eintragen.";
+  if(raw.length!==14||raw.some(x=>!/^[0-9]+$/.test(x)))return "Eigene Kartenhäufigkeiten: bitte genau 14 ganze, nichtnegative Zahlen (0–13) eintragen.";
   const counts=raw.map(Number);
   if(counts.some(x=>x>100))return "Maximal 100 Karten je Kartenwert einstellen.";
   if(counts.reduce((a,b)=>a+b,0)<playerCount*settings.cards+1)return "Der eigene Kartenstapel reicht nicht für alle "+playerCount+" Spieler und die Startablage.";
