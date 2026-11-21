@@ -215,6 +215,9 @@ async function recoveryScenario(){
   player.act({type:"donePeek"});await settle();
  }
  assert.equal(d.view().stage,"playing");
+ d.act({type:"pause",id:e.identity});await settle();
+ assert.equal(d.view().standby,null);
+ assert.equal(e.evaluate("standbySnapshot"),null);
  const before=d.view().turnStart;
  d.evaluate("peer.destroy()");await settle();
  const blocker=new SimPeer("cabo-online-v1-"+room);await settle();
