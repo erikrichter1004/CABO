@@ -11,16 +11,15 @@ Installierbare statische Web-App auf GitHub Pages. Kommunikation der Spieler üb
 - 100-auf-50-Rettung, Kamikaze, Punktelimit oder feste Rundenzahl, Stichrunden
 - Runde-Ready-Bestätigung, Gastgeber-Pause und Entfernen, automatische Wiederverbindungsversuche
 - Zugzeitlimit, Zeitstopp bei Spezialfähigkeit, Grace-Period bei aktivem Verbindungsabbruch
-- Individuelle Kartenhäufigkeiten (Fallback auf skalierte Verteilung)
+- Individuelle Kartenhäufigkeiten mit Prüfung der Eingaben; sonst 52er-Standardstapel, für größere Runden skaliert
 
 ## Noch nicht zuverlässig abgeschlossen
 - **Automatischer Hostwechsel bei unerwartetem Hostabsturz:** noch nicht umgesetzt. Freiwillige Übergabe mit Bestätigung und vollständiger Spielzustandsübertragung an den Nachfolger ist implementiert, aber noch nicht auf mehreren Geräten getestet.
-- Wiederherstellung des vollständigen geheimen Kartenzustands ohne zuvor bestätigte Gastgeberübergabe
-- Korrekte Geheimhaltung/Bestätigung aller Spezialfälle, Animationen und alle Timer-Unterbrechungen
-- Alle Sonderfälle der 61 vereinbarten Regeln, insbesondere Ready-/Peek-Hostentscheidungen, Sonderwertungen und Einstellungsvalidierung
-- Vollständige Tests mit mehreren Geräten und Tests für jede Spielregel
+- Bei Absturz ohne vorherige Übergabe muss der bisherige Gastgeber seinen gespeicherten Spielstand wiederherstellen. Ein **automatischer Ersatzhost** benötigt ein gesondertes Verfügbarkeits-/Vertrauenskonzept.
+- Abschließende Prüfung sämtlicher Regel-/Unterbrechungsfälle und der Verbindungsqualität in echten Browsern und auf mehreren Geräten
+- PWA-Installationsprüfung auf iOS/Android; das visuelle Design und die Animationen folgen erst nach Abschluss der Funktionen
 
-**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 75 automatisierte Regeltests bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
+**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 84 automatisierte Regel-/Stresstests und eine PeerJS-Mehrclient-Simulation bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
 
 Detaillierter Fortschritt: [DEVELOPMENT.md](DEVELOPMENT.md).
 
