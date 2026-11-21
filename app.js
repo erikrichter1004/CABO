@@ -3,12 +3,28 @@ const $=id=>document.getElementById(id),app=$("app");let peer=null,hostConn=null
 sessionStorage.setItem("caboIdentity",identity);
 const defaults={cards:4,peeks:2,turnsAfterCabo:1,limit:100,roundLimit:10,endMode:"points",failure:"medium",faceUp:false,reshuffle:true,multiLimit:8,abilityOwn:true,abilityOpponent:true,abilitySwap:true,abilityMode:"classic",abilityMandatory:false,exactRescue:true,kamikaze:true,startMode:"rotate",timeout:60,customCounts:""};
 let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0,reconnectTimer=null;
-let resumeSecret=sessionStorage.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={};
+let resumeSecret=sessionStorage.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={},handoffTarget=null,pendingHandoff=null,handoffTimeout=null;
 sessionStorage.setItem("caboResumeSecret",resumeSecret);
 const clean=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function note(msg){const n=$("notice");n.textContent=msg;n.classList.add("show");clearTimeout(note.t);note.t=setTimeout(()=>n.classList.remove("show"),6000)}
 function setPhase(p){phase=p;render()}
-function home(){intentionalClose=true;sessionStorage.removeItem("caboHostSnapshot");closeNet();state=null;room="";sessionStorage.removeItem("caboRoom");setPhase("home")}
+function home(){
+ intentionalClose=true;if(handoffTimeout){clearTimeout(handoffTimeout);handoffTimeout=null}
+ handoffTarget=null;pendingHandoff=null;
+ sessionStorage.removeItem("caboHostSnapshot");closeNet();state=null;room="";
+ sessionStorage.removeItem("caboRoom");setPhase("home");
+}
+function leaveRoom(){
+ if(!isHost||!state){home();return}
+ const next=state.players.find(p=>p.id!==identity&&!p.paused&&p.connected!==false&&connections.get(p.id)?.open);
+ if(!next){if(confirm("Kein anderer Gastgeber ist erreichbar. Raum wirklich beenden?"))home();return}
+ if(!confirm("Gastgeberrechte an "+next.name+" übergeben und Raum verlassen?"))return;
+ handoffTarget=next.id;
+ const snapshot={room,state:structuredClone(state),pending:structuredClone(pending),privatePeeks:structuredClone(privatePeeks),abilities:structuredClone(abilities),secrets:structuredClone(playerSecrets)};
+ connections.get(next.id).send({type:"handoff",snapshot});
+ note("Gastgeberwechsel angefordert.");
+ handoffTimeout=setTimeout(()=>{if(handoffTarget===next.id){handoffTarget=null;note("Gastgeberwechsel nicht bestätigt. Du bleibst Gastgeber.")}},12000);
+}
 function closeNet(){
  netEpoch++;if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}
  try{hostConn?.close();for(const c of connections.values())c.close();peer?.destroy()}catch{}
@@ -24,9 +40,9 @@ if(phase==="create"){app.innerHTML='<div class="panel"><h2>Neue Partie erstellen
 if(phase==="join"){app.innerHTML='<div class="panel"><h2>Raum beitreten</h2>'+nameField()+'<label>Vierstelliger Code<input id="code" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="1234"></label><button id="go">Beitreten</button><button class="outline" id="back">Zurück</button></div>';$("back").onclick=home;$("go").onclick=()=>{let n=takeName(),c=$("code").value.trim();if(n&&/^\d{4}$/.test(c))joinRoom(n,c);else note("Bitte Namen und vierstelligen Code eingeben.")};return}
 if(!state){app.innerHTML='<div class="panel">Verbinde…</div>';return}
 const me=state.players.find(p=>p.id===identity),host=state.players.find(p=>p.id===state.host),active=state.players[state.turn],myTurn=state.started&&state.stage==="playing"&&active?.id===identity&&!me?.paused;
-let out='<div class="panel"><b>Raum '+clean(room)+'</b> · '+(isHost?"Gastgeber":"Mitspieler")+' <span class="pill">'+clean(state.stage)+'</span><p class="muted">Spieler: '+state.players.length+'/8 · Runde '+state.round+'</p>';
+let out='<div class="panel"><b>Raum '+clean(room)+'</b> · '+(isHost?"Gastgeber":"Mitspieler")+' <span class="pill">'+clean(state.stage)+'</span><p class="muted">Spieler: '+state.players.length+'/8 · Runde '+state.round+'</p><button class="outline" id="leave">Raum verlassen</button>';
 out+='<div>'+state.players.map(p=>'<div class="seat '+(active?.id===p.id&&state.stage==="playing"?"active":"")+'">'+clean(p.name)+(p.id===state.host?" 👑":"")+(p.paused?" (pausiert)":"")+(p.connected===false?" (offline)":"")+' · '+p.score+' Punkte'+(state.started?" · "+p.hand.length+" Karten":"")+(isHost&&p.id!==identity?'<button data-pause="'+p.id+'">'+(p.paused?"Fortsetzen":"Pausieren")+'</button><button class="danger" data-remove="'+p.id+'">Entfernen</button>':"")+'</div>').join("")+'</div>';
-if(state.stage==="lobby"){out+='<p>Teile den Raumcode mit deinen Mitspielern.</p>'+(isHost?'<button id="start" '+(state.players.length<2?"disabled":"")+'>Partie starten</button>':'<p>Warte auf den Gastgeber…</p>')+'<button class="outline" id="leave">Raum verlassen</button></div>';app.innerHTML=out;bindCommon();if($("start"))$("start").onclick=()=>sendAction({type:"start"});return}
+if(state.stage==="lobby"){out+='<p>Teile den Raumcode mit deinen Mitspielern.</p>'+(isHost?'<button id="start" '+(state.players.length<2?"disabled":"")+'>Partie starten</button>':'<p>Warte auf den Gastgeber…</p>')+'</div>';app.innerHTML=out;bindCommon();if($("start"))$("start").onclick=()=>sendAction({type:"start"});return}
 if(state.stage==="finished"){out+='<h2>Spiel beendet</h2><p>Gewinner: '+clean(state.players.find(p=>p.id===state.winner)?.name||'Noch offen')+'</p>'+(isHost?'<button id="reset">Neues Spiel</button>':"")+'</div>';app.innerHTML=out;bindCommon();if($("reset"))$("reset").onclick=()=>sendAction({type:"reset"});return}
 if(state.stage==="reveal"){out+='<h2>'+(state.tiebreak?'Stichrunde':'Rundenergebnis')+'</h2>'+state.players.map(p=>'<p>'+clean(p.name)+': '+p.hand.reduce((s,c)=>s+c.v,0)+' Kartenpunkte · Rundenergebnis '+(state.lastResult?.find(x=>x.id===p.id)?.points??'–')+' · Gesamt '+p.score+'</p>').join("")+'<button id="ready" '+(state.tiebreak&&!state.tiebreak.ids.includes(identity)?'disabled':'')+'>Bereit für '+(state.tiebreak?'Stichrunde':'nächste Runde')+'</button><p>Bereit: '+(state.ready?.length||0)+'/'+state.players.filter(x=>!x.paused&&(!state.tiebreak||state.tiebreak.ids.includes(x.id))).length+'</p>'+(isHost?'<button id="forceReady" '+(Date.now()-(state.readyStart||Date.now())<90000?'disabled':'')+'>Fehlende Spieler als bereit markieren (ab 90 s)</button>':'')+'</div>';app.innerHTML=out;bindCommon();if($("ready"))$("ready").onclick=()=>sendAction({type:"ready"});if($("forceReady"))$("forceReady").onclick=()=>sendAction({type:"forceReady"});return}
 if(state.stage==="peeking"){out+='<h2>'+(state.tiebreak?'Stichrunde: Anfangsblick':'Anfangsblick')+'</h2><p>Wähle '+Math.min(state.tiebreak?2:state.settings.peeks,me?.hand.length||0)+' Karten zum privaten Anschauen.</p><div class="cards">'+(me?.hand||[]).map((c,i)=>'<button class="card" data-peek="'+i+'">🂠</button>').join("")+'</div><p>Angesehen: '+(state.peeks?.[identity]?.length||0)+'/'+(state.tiebreak?2:state.settings.peeks)+'</p>'+(peek?'<p>Karte '+(peek.index+1)+': <strong>'+peek.value+'</strong></p><button id="closeInitialPeek">Karte schließen</button>':'')+'<button id="donePeek" '+(peek||(state.peeks?.[identity]?.length||0)<Math.min(state.tiebreak?2:state.settings.peeks,me?.hand.length||0)?'disabled':'')+'>Fertig / bereit</button>'+(isHost?'<button id="forcePeek" '+(Date.now()-(state.peekStart||Date.now())<90000?'disabled':'')+'>Fehlende Anfangsblicke abschließen (ab 90 s)</button>':'')+'</div>';app.innerHTML=out;bindCommon();document.querySelectorAll("[data-peek]").forEach(b=>b.onclick=()=>sendAction({type:"initialPeek",index:Number(b.dataset.peek)}));if($("closeInitialPeek"))$("closeInitialPeek").onclick=()=>sendAction({type:"closeInitialPeek"});$("donePeek").onclick=()=>sendAction({type:"donePeek"});if($("forcePeek"))$("forcePeek").onclick=()=>sendAction({type:"forcePeek"});return}
@@ -46,7 +62,7 @@ if($("multiSwap"))$("multiSwap").onclick=()=>{if(selected.length<2)return;const 
 document.querySelectorAll("[data-swap-own]").forEach(b=>b.onclick=()=>{selected=[Number(b.dataset.swapOwn)];note("Eigene Karte ausgewählt. Jetzt fremde Karte antippen.")});document.querySelectorAll("[data-swap-other]").forEach(b=>b.onclick=()=>{if(selected.length!==1){note("Zuerst eigene Karte auswählen.");return}const [target,other]=b.dataset.swapOther.split(":");sendAction({type:"swapAbility",own:selected[0],target,other:Number(other)})});document.querySelectorAll("[data-ability]").forEach(b=>b.onclick=()=>{const [target,index]=b.dataset.ability.split(":");sendAction({type:"abilityTarget",target,index:Number(index)})});if($("finishAbility"))$("finishAbility").onclick=()=>sendAction({type:"finishAbility"});if($("forceAbility"))$("forceAbility").onclick=()=>sendAction({type:"forceAbility"});if($("endTurn"))$("endTurn").onclick=()=>sendAction({type:"endTurn"});if($("callCabo"))$("callCabo").onclick=()=>{if(confirm("CABO wirklich ansagen?"))sendAction({type:"cabo"})};
 if($("closePeek"))$("closePeek").onclick=()=>{peek=null;render()};
 }
-function bindCommon(){document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{if(confirm("Spieler dauerhaft entfernen?"))sendAction({type:"remove",id:b.dataset.remove})});document.querySelectorAll("[data-pause]").forEach(b=>b.onclick=()=>sendAction({type:"pause",id:b.dataset.pause}));if($("leave"))$("leave").onclick=home}
+function bindCommon(){document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{if(confirm("Spieler dauerhaft entfernen?"))sendAction({type:"remove",id:b.dataset.remove})});document.querySelectorAll("[data-pause]").forEach(b=>b.onclick=()=>sendAction({type:"pause",id:b.dataset.pause}));if($("leave"))$("leave").onclick=leaveRoom}
 function newState(n){return {host:identity,players:[{id:identity,name:n,score:0,hand:[],paused:false,rescued:false,connected:true}],settings:{...opts},started:false,stage:"lobby",round:0,turn:0,deck:[],discard:[],cabo:null,lastTurns:0,turnStart:Date.now(),starter:0}}
 function peerId(c){return "cabo-online-v1-"+c}
 function createRoom(n,resume=false){intentionalClose=true;closeNet();intentionalClose=false;isHost=true;const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;if(snapshot){try{const saved=JSON.parse(snapshot);room=saved.room;state=saved.state;pending=saved.pending||{};privatePeeks=saved.privatePeeks||{};abilities=saved.abilities||{};playerSecrets=saved.secrets||{}}catch{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}}else{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}playerSecrets[identity]=resumeSecret;sessionStorage.setItem("caboRoom",room);setPhase("connecting");peer=new Peer(peerId(room));peer.on("open",()=>{setPhase("game");broadcast()});peer.on("connection",conn=>{conn.on("data",msg=>receive(conn,msg));conn.on("close",()=>{if(conn.playerId&&connections.get(conn.playerId)===conn){connections.delete(conn.playerId);const p=state?.players.find(x=>x.id===conn.playerId);if(p){p.connected=false;p.disconnectedAt=Date.now()}broadcast()}});conn.on("open",()=>{})});peer.on("error",e=>{note("Verbindung fehlgeschlagen: "+e.type);if(e.type==="unavailable-id"){room=String(Math.floor(1000+Math.random()*9000));peer.destroy();createRoom(n)}})}
@@ -228,7 +244,7 @@ function advanceWaitingPhase(){
  else setupRound();
 }
 function apply(id,a){
- if(!isHost||!a||typeof a!=="object")return;
+ if(!isHost||handoffTarget||!a||typeof a!=="object")return;
  const p=state.players.find(x=>x.id===id);if(!p)return;
  if(a.type==="remove"&&id===state.host){
   const index=state.players.findIndex(x=>x.id===a.id);
@@ -304,7 +320,7 @@ else if(a.type==="multiSwap"&&pending[id]&&Array.isArray(a.indices)){const ids=[
 else if(a.type==="endTurn"&&state.caboEligible===id){nextTurn()}else if(a.type==="cabo"&&!state.tiebreak&&!state.cabo&&!pending[id]&&state.caboEligible===id){state.cabo=id;state.lastTurns=state.settings.turnsAfterCabo*state.players.filter(x=>!x.paused&&x.id!==id).length;state.caboRemaining=Object.fromEntries(state.players.filter(x=>!x.paused&&x.id!==id).map(x=>[x.id,state.settings.turnsAfterCabo]));if(!state.lastTurns)scoreRound();else nextTurn(true)}
 broadcast()}
 function tick(){
- if(!state)return;
+ if(!state||(isHost&&handoffTarget))return;
  const now=Date.now();
  if(state.stage==="peeking"||state.stage==="reveal"){
   const peeking=state.stage==="peeking";
