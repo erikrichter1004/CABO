@@ -20,11 +20,22 @@
 | 6 | Gastgeberverwaltung | ✅ Bereichslogik abgeschlossen | Pausieren/Entfernen, freiwillige Übergabe, automatische Nachfolgerwahl mit 20-s-Erreichbarkeitskontrolle, Übernahme bei Absturz auch ohne Rückkehr, Sitzungswiederherstellung; 2-/3-Spieler-, Wechsel- und Peer-ID-Belegungstests bestanden; echte Geräteprüfung folgt in Schritt 9 |
 | 7 | Runden- und Zeitsteuerung | ✅ Bereichslogik abgeschlossen | 60-s-Erinnerung, Gastgeberfreigabe ab 90 s, Ready- und Peek-Gates, Überfällige Spezialfähigkeit beenden, Zugtimer und Offline-Pause |
 | 8 | Vollständige Regeltests | ✅ Automatisierte Tests abgeschlossen | **96 automatische Regel- und Belastungstests**, 2–8-Spieler-Stresstests und isolierte Mehrclient-Simulationen in GitHub Actions erfolgreich; echte Browser-/Gerätetests folgen unter Bereich 9 |
-| 9 | Integration & Stabilität | 🟡 In Arbeit | Simulierte Drei-Spieler-Partie mit privaten Karten, Wiederbeitritt, Raumübergabe und Snapshot-Schutz sowie Host-Wiederherstellung aus Session-Snapshot getestet; echte Browser-/Mehrgerätetests und PWA-Prüfung stehen aus |
+| 9 | Integration & Stabilität | 🟡 In Arbeit | Vollständige simulierte Spiele mit 2, 3, 4 und 8 Teilnehmern (einschließlich 3-Runden-Partie und Stichrunde), Wiederbeitritt, Hostübergabe, Snapshot-Schutz und Wiederherstellung erfolgreich; echte Browser-/Mehrgerätetests und PWA-Prüfung stehen noch aus |
+
+## Automatisierte Vollpartien – Paket 3 abgeschlossen
+
+Die GitHub-Actions-Mehrclient-Simulation spielt Spiele vom Austeilen bis zum eindeutigen Sieger durch. Erfolgreich geprüft:
+
+- Drei Spieler über **drei vollständige Runden**, einschließlich geheimer Anfangsblicke, Ziehen/Tauschen, CABO, letzten Gegenspielerzügen, Punktezählung und Bereit-Bestätigungen.
+- Eine **komplette Stichrunde** nach zuvor erzwungenem Gleichstand: vier Karten und zwei Anfangsblicke der Beteiligten, je drei Züge, Gesamtergebnis nur aus der Stichrunde; Hauptpunkte bleiben unverändert.
+- Weitere **vollständig beendete Partien mit 2, 4 und 8 simulierten, getrennten Clients** mit bestätigter Siegeranzeige und identischen Punkteständen auf allen Geräten.
+- Bereits vorhandene Tests decken Stapelnachmischen, 2–8-Spieler-Kartenerhaltung, Spezialfähigkeiten, Hostausfall und Verbindungswiederherstellung ab.
+
+Die erfolgreichen Tests verwenden **simulierte PeerJS-Datenkanäle**, keine echte Mobilfunk- oder Geräteverbindung. Punkt 4 bleibt deshalb notwendig.
 
 ## Letzter abgeschlossener Implementierungsblock
 
-**Arbeitsplan (2 von 4 Paketen abgeschlossen):** Paket 1 – automatische Gastgeber-Ausfallsicherung ✅. Paket 2 – zusätzliche Regel- und Belastungstests ✅. Paket 3 – vollständige simulierte Spielrunden ⬜. Paket 4 – abschließende Browser-/Geräteprüfung ⬜.
+**Arbeitsplan (3 von 4 Paketen abgeschlossen):** Paket 1 – automatische Gastgeber-Ausfallsicherung ✅. Paket 2 – zusätzliche Regel- und Belastungstests ✅. Paket 3 – vollständige simulierte Spielrunden ✅. Paket 4 – abschließende Browser-/Geräteprüfung ⬜.
 
 **Zusatzprüfung in Paket 2:** Zehn neue Grenzfalltests für Mehrfachtausch aus offenem und verdecktem Stapel, Strafvarianten, leere Hände, ungültige Aktionen sowie genügend Karten für Stichrunden. Fehler beim misslungenen Mehrfachtausch aus der offenen Ablage behoben: Pflicht zum Kartentausch bleibt gewahrt. Benutzerdefinierte Kartenhäufigkeiten müssen nun auch potenzielle Stichrunden mit vier Karten je Spieler ermöglichen.
 
@@ -38,7 +49,7 @@
 
 ## Nächster konkreter Schritt
 
-**Paket 3 von 4 – vollständige simulierte Spielrunden:** Mehrere komplette Spiele bis zum Ende durchspielen, einschließlich CABO-Wertung, Sonderfähigkeiten, Ready-Phasen, Stichrunde, Wechsel der Kartenstapel und synchronisierten Ergebnissen. Danach Paket 4 – reale Browser-/Geräte- und PWA-Tests.
+**Paket 4 von 4 – Browser-/Geräte- und PWA-Prüfung:** Browserübergreifende Verbindungen unter echten WebRTC-Bedingungen, Installation als PWA und vollständige Bedienbarkeit prüfen; reale Mehrgerätetests sind noch nicht belegt.
 
 ### Zusätzliche Prüfnachweise
 
