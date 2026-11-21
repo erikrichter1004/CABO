@@ -240,7 +240,7 @@ function joinRoom(n,c){
    if(msg?.type==="state"){
     hostLastSeenAt=Date.now();reconnectAttempts=0;
     if(state&&Number(msg.state.revision||0)<Number(state.revision||0))return;
-    state=msg.state;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;
+    state=msg.state;if(state.standby!==identity)standbySnapshot=null;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;
     abilityView=msg.privateAbility||null;setPhase("game");
    }
    if(msg?.type==="error"){
