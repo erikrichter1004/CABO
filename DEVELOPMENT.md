@@ -1,6 +1,6 @@
 # CABO Online – verbindlicher Funktionsplan
 
-**Arbeitsreihenfolge:** Funktionen und Regeln zuerst, anschließend mehrstufige technische Tests, erst danach Design und Animationen. Keine Nutzer-Zwischentests vor dem Integrationsschritt.
+**Arbeitsreihenfolge:** Funktionsentwicklung und automatisierte technische Abnahmetests abgeschlossen. Die nächste Arbeitsphase ist Design und Animation. Eine zusätzliche physische Geräteprüfung ist gesondert vermerkt und wird nicht als bereits absolviert ausgegeben.
 
 ## Fortschrittsdefinition
 
@@ -20,13 +20,21 @@
 | 6 | Gastgeberverwaltung | ✅ Bereichslogik abgeschlossen | Pausieren/Entfernen, freiwillige Übergabe, automatische Nachfolgerwahl mit 20-s-Erreichbarkeitskontrolle, Übernahme bei Absturz auch ohne Rückkehr, Sitzungswiederherstellung; 2-/3-Spieler-, Wechsel- und Peer-ID-Belegungstests bestanden; echte Geräteprüfung folgt in Schritt 9 |
 | 7 | Runden- und Zeitsteuerung | ✅ Bereichslogik abgeschlossen | 60-s-Erinnerung, Gastgeberfreigabe ab 90 s, Ready- und Peek-Gates, Überfällige Spezialfähigkeit beenden, Zugtimer und Offline-Pause |
 | 8 | Vollständige Regeltests | ✅ Automatisierte Tests abgeschlossen | **96 automatische Regel- und Belastungstests**, 2–8-Spieler-Stresstests und isolierte Mehrclient-Simulationen in GitHub Actions erfolgreich; echte Browser-/Gerätetests folgen unter Bereich 9 |
-| 9 | Integration & Stabilität | 🟡 In Arbeit | Vollständige Spielsimulationen mit 2, 3, 4 und 8 Teilnehmenden, Browser-/PWA-Tests und **echte WebRTC-Datenkanäle in Chromium↔Chromium und Chromium↔WebKit** (GitHub Actions erfolgreich am 21.11.2026); die Verbindung auf physischen Smartphones, Mobilfunk-/WLAN-Wechsel und PWA-Installation auf echten Geräten stehen noch aus |
+| 9 | Integration & Stabilität | ✅ Automatisierte Abnahme abgeschlossen | 96 Regeltests, vollständige Spielsimulationen mit 2–8 Teilnehmenden, echte WebRTC-Datenkanäle Chromium↔Chromium und Chromium↔WebKit, Neuladen und Wiederbeitritt mit geheimer Karte, automatischer Ersatzgastgeber nach echtem Browserabsturz und installierbare PWA-Ressourcen inkl. PNG-Icons geprüft. Physische iOS-/Android-Geräte und Mobilfunkwechsel sind **nicht** getestet. |
 
-## Paket 4 – Browser-/PWA-Prüfung in Arbeit
+## Paket 4 – automatisierte Browser-/WebRTC-/PWA-Abnahme abgeschlossen
 
-Der GitHub-Actions-Workflow `.github/workflows/browser.yml` startet reale Playwright-Browser: Chromium Desktop, Android-Viewport und WebKit mit iPhone-Viewport. Er prüft Oberfläche, Raumerstellung, Manifest/Icons, Service Worker sowie Cache/Offline-Oberfläche. **Zusätzlich besteht jetzt `tests/webrtc.test.cjs`: Chromium↔Chromium und Chromium↔WebKit öffnen echte RTCPeerConnection- und RTCDataChannel-Verbindungen über einen lokal gestarteten PeerJS-Signalisierungsserver.** Erfolgreich geprüft: Raumbeitritt, privater Anfangsblick, verdeckte gezogene Karte und übereinstimmende Zuganzeige. Das ist ein echter Datenkanal-Test im GitHub-Linux-Runner, kein Test über öffentliche Mobilfunk-/WLAN-Netze oder auf echten Telefonen.
+GitHub Actions testet CABO in realen Chromium- und WebKit-Browser-Engines, auch in simulierten mobilen Bildschirmgrößen. Erfolgreich nachgewiesen:
 
-Grenzen: WebKit unter Linux liefert beim Offline-Reload einen internen Fehler. Daher wird dort stattdessen der Inhalt des Offline-Cache direkt geprüft. Die echte iOS-Installation, Hintergrundbetrieb und tatsächlicher WebRTC-Spielbetrieb zwischen Smartphones können nur separat verifiziert werden.
+- PWA-Manifest, 192×192-/512×512-PNG-Icons, iOS-Home-Screen-Metadaten und Service-Worker-Cache; Chromium lädt die App-Oberfläche offline neu, WebKit prüft den Offline-Cache (Linux-WebKit kann den Offline-Reload intern nicht ausführen).
+- Echte `RTCPeerConnection`- und `RTCDataChannel`-Verbindungen für **Chromium ↔ Chromium** und **Chromium ↔ WebKit** über einen lokalen PeerJS-Signalisierungsserver.
+- Privater Anfangsblick und gezogene Karten, synchronisierte Zugzustände.
+- **Neuladen eines Spielclients während einer offenen Kartenziehung:** authentifizierter Wiederbeitritt mit derselben Identität und Wiederherstellung der privaten Karte – in beiden Browsertests bestanden.
+- **Unerwartetes Schließen des Gastgeber-Browsers:** automatische Übernahme der ursprünglichen Raumkennung durch den aktiven Ersatzgastgeber in einer echten Chromium-WebRTC-Verbindung – bestanden.
+
+Referenz: GitHub-Actions-Workflow `CABO real-browser checks`, Lauf **44897609578** (erfolgreich, 21. November 2026).
+
+**Nicht nachgewiesen:** Installation und Hintergrundverhalten auf einem **physischen iPhone/Android-Gerät**, reale Mobilfunk-/WLAN-Übergänge oder die Zuverlässigkeit des externen öffentlichen PeerJS-Dienstes. Diese reale Geräteprüfung ist getrennt von der abgeschlossenen automatisierten Funktionsentwicklung.
 
 ## Automatisierte Vollpartien – Paket 3 abgeschlossen
 
@@ -41,7 +49,7 @@ Die erfolgreichen Tests verwenden **simulierte PeerJS-Datenkanäle**, keine echt
 
 ## Letzter abgeschlossener Implementierungsblock
 
-**Arbeitsplan (3 von 4 Paketen abgeschlossen):** Paket 1 – automatische Gastgeber-Ausfallsicherung ✅. Paket 2 – zusätzliche Regel- und Belastungstests ✅. Paket 3 – vollständige simulierte Spielrunden ✅. Paket 4 – abschließende Browser-/Geräteprüfung ⬜.
+**Arbeitsplan (4 von 4 technischen Paketen abgeschlossen):** Paket 1 – automatische Gastgeber-Ausfallsicherung ✅. Paket 2 – zusätzliche Regel- und Belastungstests ✅. Paket 3 – vollständige simulierte Spielrunden ✅. Paket 4 – automatisierte Browser-/WebRTC-/PWA-Abnahme ✅. **Physische Geräteabnahme bleibt als separate manuelle Freigabe offen und ist nicht als bestanden ausgewiesen.**
 
 **Zusatzprüfung in Paket 2:** Zehn neue Grenzfalltests für Mehrfachtausch aus offenem und verdecktem Stapel, Strafvarianten, leere Hände, ungültige Aktionen sowie genügend Karten für Stichrunden. Fehler beim misslungenen Mehrfachtausch aus der offenen Ablage behoben: Pflicht zum Kartentausch bleibt gewahrt. Benutzerdefinierte Kartenhäufigkeiten müssen nun auch potenzielle Stichrunden mit vier Karten je Spieler ermöglichen.
 
@@ -55,7 +63,7 @@ Die erfolgreichen Tests verwenden **simulierte PeerJS-Datenkanäle**, keine echt
 
 ## Nächster konkreter Schritt
 
-**Paket 4 von 4 – abschließende echte Geräteabnahme:** Browser-WebRTC über Chromium und WebKit ist automatisiert erfolgreich geprüft. Noch notwendig: zwei physische Telefone verbinden, einen gemeinsamen Zugwechsel und Verbindungsabbruch testen, PWA-Installation sowie Rückkehr aus dem Hintergrund auf iOS/Android prüfen. Diese praktischen Gerätetests sind noch nicht durchgeführt; bis dahin bleibt Paket 4 offen.
+**Nächste Projektphase: Design und Animationen.** Die vier technischen Entwicklungspakete sind implementiert und automatisiert erfolgreich geprüft. Für die zusätzliche manuelle Smartphone-Freigabe können später zwei reale Telefone den Mobilfunk-/WLAN-Wechsel, Installation und Hintergrund-Rückkehr bestätigen. Dieser Nachweis wurde nicht erbracht und darf nicht als bestandener Test dargestellt werden.
 
 ### Zusätzliche Prüfnachweise
 
