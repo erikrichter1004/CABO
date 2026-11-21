@@ -13,13 +13,13 @@ Installierbare statische Web-App auf GitHub Pages. Kommunikation der Spieler üb
 - Zugzeitlimit, Zeitstopp bei Spezialfähigkeit, Grace-Period bei aktivem Verbindungsabbruch
 - Individuelle Kartenhäufigkeiten mit Prüfung der Eingaben; sonst 52er-Standardstapel, für größere Runden skaliert
 
-## Noch nicht zuverlässig abgeschlossen
-- **Automatischer Hostwechsel bei unerwartetem Hostabsturz:** noch nicht umgesetzt. Freiwillige Übergabe mit Bestätigung und vollständiger Spielzustandsübertragung an den Nachfolger ist implementiert, aber noch nicht auf mehreren Geräten getestet.
-- Bei Absturz ohne vorherige Übergabe muss der bisherige Gastgeber seinen gespeicherten Spielstand wiederherstellen. Ein **automatischer Ersatzhost** benötigt ein gesondertes Verfügbarkeits-/Vertrauenskonzept.
+## Ausfallsicherung und verbleibende Einschränkungen
+- **Automatischer Hostwechsel:** Implementiert und in zwei- sowie dreispielerigen WebRTC-Simulationen geprüft. Ein zuvor festgelegter Nachfolger übernimmt bei plötzlichem Hostabsturz unter demselben Raumcode. Reale Browser-/Gerätetests stehen noch aus.
+- **Privatsphäre-Hinweis:** Der Reservegastgeber erhält vorab eine vollständige Kopie des aktuellen, auch geheimen Kartenzustands. Die Spieloberfläche zeigt ihm weiterhin nur erlaubte Karten, technisch könnte er jedoch versteckte Werte auslesen. In den Spieleinstellungen kann die automatische Übernahme deshalb abgeschaltet werden. Ohne verfügbare Reserveperson muss der bisherige Gastgeber seinen gespeicherten Spielstand wiederherstellen.
 - Abschließende Prüfung sämtlicher Regel-/Unterbrechungsfälle und der Verbindungsqualität in echten Browsern und auf mehreren Geräten
 - PWA-Installationsprüfung auf iOS/Android; das visuelle Design und die Animationen folgen erst nach Abschluss der Funktionen
 
-**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 84 automatisierte Regel-/Stresstests und eine PeerJS-Mehrclient-Simulation bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
+**Nicht als fertiges Spiel behandeln.** GitHub Actions führt Syntaxprüfung und derzeit 86 automatisierte Regel-/Stresstests und eine PeerJS-Mehrclient-Simulation bei jedem Push aus. Auch ein erfolgreicher Prüflauf ist noch kein realer Multiplayer-Integrationstest.
 
 Detaillierter Fortschritt: [DEVELOPMENT.md](DEVELOPMENT.md).
 
