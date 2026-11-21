@@ -2,12 +2,18 @@
 const $=id=>document.getElementById(id),app=$("app");let peer=null,hostConn=null,connections=new Map(),state=null,identity=sessionStorage.getItem("caboIdentity")||crypto.randomUUID(),room=sessionStorage.getItem("caboRoom")||"",isHost=false,selected=[],drawn=null,peek=null,phase="home",ticker=null;
 sessionStorage.setItem("caboIdentity",identity);
 const defaults={cards:4,peeks:2,turnsAfterCabo:1,limit:100,roundLimit:10,endMode:"points",failure:"medium",faceUp:false,reshuffle:true,multiLimit:8,abilityOwn:true,abilityOpponent:true,abilitySwap:true,abilityMode:"classic",abilityMandatory:false,exactRescue:true,kamikaze:true,startMode:"rotate",timeout:60,customCounts:""};
-let opts={...defaults};let intentionalClose=false,reconnectAttempts=0;
+let opts={...defaults};let intentionalClose=false,reconnectAttempts=0,netEpoch=0,reconnectTimer=null;
+let resumeSecret=sessionStorage.getItem("caboResumeSecret")||crypto.randomUUID(),playerSecrets={};
+sessionStorage.setItem("caboResumeSecret",resumeSecret);
 const clean=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function note(msg){const n=$("notice");n.textContent=msg;n.classList.add("show");clearTimeout(note.t);note.t=setTimeout(()=>n.classList.remove("show"),6000)}
 function setPhase(p){phase=p;render()}
 function home(){intentionalClose=true;sessionStorage.removeItem("caboHostSnapshot");closeNet();state=null;room="";sessionStorage.removeItem("caboRoom");setPhase("home")}
-function closeNet(){try{hostConn?.close();for(const c of connections.values())c.close();peer?.destroy()}catch{}hostConn=null;connections.clear();peer=null;isHost=false}
+function closeNet(){
+ netEpoch++;if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}
+ try{hostConn?.close();for(const c of connections.values())c.close();peer?.destroy()}catch{}
+ hostConn=null;connections.clear();peer=null;isHost=false;
+}
 function nameField(){return '<label>Dein Spielername<input id="playerName" maxlength="24" value="'+clean(sessionStorage.getItem("caboName")||"")+'" placeholder="Name"></label>'}
 function takeName(){const n=$("playerName")?.value.trim();if(!n){note("Bitte Namen eingeben.");return null}sessionStorage.setItem("caboName",n);return n}
 function optionsUI(){const choices=(key,label,values)=>'<label>'+label+'<select data-option="'+key+'">'+values.map(([v,t])=>'<option value="'+v+'" '+(String(opts[key])===String(v)?"selected":"")+'>'+t+'</option>').join("")+'</select></label>';return '<div class="settings">'+[
@@ -43,12 +49,74 @@ if($("closePeek"))$("closePeek").onclick=()=>{peek=null;render()};
 function bindCommon(){document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{if(confirm("Spieler dauerhaft entfernen?"))sendAction({type:"remove",id:b.dataset.remove})});document.querySelectorAll("[data-pause]").forEach(b=>b.onclick=()=>sendAction({type:"pause",id:b.dataset.pause}));if($("leave"))$("leave").onclick=home}
 function newState(n){return {host:identity,players:[{id:identity,name:n,score:0,hand:[],paused:false,rescued:false,connected:true}],settings:{...opts},started:false,stage:"lobby",round:0,turn:0,deck:[],discard:[],cabo:null,lastTurns:0,turnStart:Date.now(),starter:0}}
 function peerId(c){return "cabo-online-v1-"+c}
-function createRoom(n,resume=false){intentionalClose=true;closeNet();intentionalClose=false;isHost=true;const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;if(snapshot){try{const saved=JSON.parse(snapshot);room=saved.room;state=saved.state;pending=saved.pending||{};privatePeeks=saved.privatePeeks||{};abilities=saved.abilities||{}}catch{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}}else{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}sessionStorage.setItem("caboRoom",room);setPhase("connecting");peer=new Peer(peerId(room));peer.on("open",()=>{setPhase("game");broadcast()});peer.on("connection",conn=>{conn.on("data",msg=>receive(conn,msg));conn.on("close",()=>{if(conn.playerId&&connections.get(conn.playerId)===conn){connections.delete(conn.playerId);const p=state?.players.find(x=>x.id===conn.playerId);if(p){p.connected=false;p.disconnectedAt=Date.now()}broadcast()}});conn.on("open",()=>{})});peer.on("error",e=>{note("Verbindung fehlgeschlagen: "+e.type);if(e.type==="unavailable-id"){room=String(Math.floor(1000+Math.random()*9000));peer.destroy();createRoom(n)}})}
-function joinRoom(n,c){intentionalClose=true;closeNet();intentionalClose=false;room=c;isHost=false;setPhase("connecting");peer=new Peer();peer.on("open",()=>{hostConn=peer.connect(peerId(c),{reliable:true});hostConn.on("open",()=>{reconnectAttempts=0;hostConn.send({type:"hello",id:identity,name:n})});hostConn.on("data",msg=>{if(msg.type==="state"){if(state&&Number(msg.state.revision||0)<Number(state.revision||0))return;state=msg.state;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;abilityView=msg.privateAbility||null;setPhase("game")}if(msg.type==="error")note(msg.message)});hostConn.on("close",()=>{note("Verbindung unterbrochen. Automatischer Wiederbeitritt…");if(!intentionalClose&&reconnectAttempts<8){reconnectAttempts++;setTimeout(()=>{if(!intentionalClose)joinRoom(n,c)},Math.min(2000*reconnectAttempts,12000))}});hostConn.on("error",()=>note("Raum nicht erreichbar."))});peer.on("error",()=>note("Verbindung fehlgeschlagen. Prüfe den Raumcode."))}
-function receive(conn,msg){if(!msg||typeof msg!=="object")return;if(msg.type==="hello"){if(state.started&&!state.players.some(p=>p.id===msg.id)){conn.send({type:"error",message:"Partie läuft bereits."});conn.close();return}if(state.players.length>=8&&!state.players.some(p=>p.id===msg.id)){conn.send({type:"error",message:"Raum ist voll."});conn.close();return}conn.playerId=msg.id;connections.get(msg.id)?.close();connections.set(msg.id,conn);if(!state.players.some(p=>p.id===msg.id))state.players.push({id:msg.id,name:String(msg.name).slice(0,24),score:0,hand:[],paused:false,rescued:false,connected:true});const joined=state.players.find(p=>p.id===msg.id);joined.connected=true;joined.disconnectedAt=null;if(state.stage==="playing"&&state.players[state.turn]?.id===joined.id&&state.connectionPauseAt){state.turnStart+=Date.now()-state.connectionPauseAt;state.connectionPauseAt=null}broadcast();return}if(msg.type==="action"&&conn.playerId)apply(conn.playerId,msg.action)}
+function createRoom(n,resume=false){intentionalClose=true;closeNet();intentionalClose=false;isHost=true;const snapshot=resume?sessionStorage.getItem("caboHostSnapshot"):null;if(snapshot){try{const saved=JSON.parse(snapshot);room=saved.room;state=saved.state;pending=saved.pending||{};privatePeeks=saved.privatePeeks||{};abilities=saved.abilities||{};playerSecrets=saved.secrets||{}}catch{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}}else{room=String(Math.floor(1000+Math.random()*9000));state=newState(n)}playerSecrets[identity]=resumeSecret;sessionStorage.setItem("caboRoom",room);setPhase("connecting");peer=new Peer(peerId(room));peer.on("open",()=>{setPhase("game");broadcast()});peer.on("connection",conn=>{conn.on("data",msg=>receive(conn,msg));conn.on("close",()=>{if(conn.playerId&&connections.get(conn.playerId)===conn){connections.delete(conn.playerId);const p=state?.players.find(x=>x.id===conn.playerId);if(p){p.connected=false;p.disconnectedAt=Date.now()}broadcast()}});conn.on("open",()=>{})});peer.on("error",e=>{note("Verbindung fehlgeschlagen: "+e.type);if(e.type==="unavailable-id"){room=String(Math.floor(1000+Math.random()*9000));peer.destroy();createRoom(n)}})}
+function scheduleReconnect(n,c,epoch){
+ if(intentionalClose||epoch!==netEpoch||reconnectTimer)return;
+ reconnectAttempts++;
+ note("Verbindung unterbrochen. Automatischer Wiederbeitritt wird versucht.");
+ reconnectTimer=setTimeout(()=>{
+  reconnectTimer=null;
+  if(!intentionalClose&&epoch===netEpoch)joinRoom(n,c);
+ },Math.min(1500*reconnectAttempts,12000));
+}
+function joinRoom(n,c){
+ intentionalClose=true;closeNet();intentionalClose=false;
+ const epoch=netEpoch;
+ room=c;isHost=false;setPhase("connecting");
+ peer=new Peer();
+ peer.on("open",()=>{
+  if(epoch!==netEpoch)return;
+  const conn=peer.connect(peerId(c),{reliable:true});hostConn=conn;
+  conn.on("open",()=>{
+   if(epoch!==netEpoch)return;
+   reconnectAttempts=0;
+   conn.send({type:"hello",id:identity,name:n,token:resumeSecret});
+  });
+  conn.on("data",msg=>{
+   if(epoch!==netEpoch)return;
+   if(msg?.type==="state"){
+    if(state&&Number(msg.state.revision||0)<Number(state.revision||0))return;
+    state=msg.state;selected=[];drawn=msg.privateDraw||null;peek=msg.privatePeek??null;
+    abilityView=msg.privateAbility||null;setPhase("game");
+   }
+   if(msg?.type==="error")note(msg.message);
+  });
+  conn.on("close",()=>scheduleReconnect(n,c,epoch));
+  conn.on("error",()=>scheduleReconnect(n,c,epoch));
+ });
+ peer.on("error",()=>scheduleReconnect(n,c,epoch));
+ peer.on("disconnected",()=>scheduleReconnect(n,c,epoch));
+}
+function receive(conn,msg){
+ if(!msg||typeof msg!=="object"||!state)return;
+ if(msg.type==="hello"){
+  const playerId=msg.id,token=msg.token;
+  const deny=message=>{conn.send({type:"error",message});conn.close()};
+  if(typeof playerId!=="string"||playerId.length>128||typeof token!=="string"||token.length<16||token.length>200||playerId===state.host){
+   deny("Ungültige Spieleridentität.");return;
+  }
+  const existing=state.players.some(p=>p.id===playerId);
+  if(state.started&&!existing){deny("Partie läuft bereits.");return}
+  if(state.players.length>=8&&!existing){deny("Raum ist voll.");return}
+  if(existing&&playerSecrets[playerId]&&playerSecrets[playerId]!==token){deny("Diese Spieleridentität gehört zu einer anderen Sitzung.");return}
+  playerSecrets[playerId]=token;
+  conn.playerId=playerId;
+  const previous=connections.get(playerId);
+  connections.set(playerId,conn);
+  if(previous&&previous!==conn)previous.close();
+  if(!existing)state.players.push({id:playerId,name:String(msg.name||"Gast").slice(0,24),score:0,hand:[],paused:false,rescued:false,connected:true});
+  const joined=state.players.find(p=>p.id===playerId);
+  joined.connected=true;joined.disconnectedAt=null;
+  if(state.stage==="playing"&&state.players[state.turn]?.id===playerId&&state.connectionPauseAt){
+   state.turnStart+=Date.now()-state.connectionPauseAt;state.connectionPauseAt=null;
+  }
+  broadcast();return;
+ }
+ if(msg.type==="action"&&conn.playerId&&connections.get(conn.playerId)===conn)apply(conn.playerId,msg.action);
+}
 function sendAction(action){if(isHost)apply(identity,action);else if(hostConn?.open)hostConn.send({type:"action",action});else note("Keine Verbindung zum Gastgeber.")}
 function privateState(id){const copy=structuredClone(state);for(const p of copy.players){if(p.id!==id)p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}));else p.hand=p.hand.map(c=>({up:c.up,v:c.up?c.v:null}))}copy.deck=copy.deck.map(()=>({}));copy.discard=copy.discard.map(c=>({v:c.v,up:true}));if(copy.peeks){copy.peeks=Object.fromEntries(Object.entries(copy.peeks).filter(([playerId])=>playerId===id))}return copy}
-function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities}))}catch{}for(const [id,c] of connections)if(c.open)c.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null});const own=privateState(identity);stateView=own;renderHost()}
+function broadcast(){if(!isHost||!state)return;state.revision=(state.revision||0)+1;try{sessionStorage.setItem("caboHostSnapshot",JSON.stringify({room,state,pending,privatePeeks,abilities,secrets:playerSecrets}))}catch{}for(const [id,c] of connections)if(c.open)c.send({type:"state",state:privateState(id),privateDraw:pending[id]||null,privatePeek:privatePeeks[id]||null,privateAbility:abilities[id]||null});const own=privateState(identity);stateView=own;renderHost()}
 let stateView=null,pending={},privatePeeks={},abilities={},abilityView=null;
 function renderHost(){const full=state;state=stateView;drawn=pending[identity]||null;peek=privatePeeks[identity]||null;abilityView=abilities[identity]||null;render();state=full}
 function validateSettings(settings,playerCount=2){
