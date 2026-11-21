@@ -20,7 +20,13 @@
 | 6 | Gastgeberverwaltung | ✅ Bereichslogik abgeschlossen | Pausieren/Entfernen, freiwillige Übergabe, automatische Nachfolgerwahl mit 20-s-Erreichbarkeitskontrolle, Übernahme bei Absturz auch ohne Rückkehr, Sitzungswiederherstellung; 2-/3-Spieler-, Wechsel- und Peer-ID-Belegungstests bestanden; echte Geräteprüfung folgt in Schritt 9 |
 | 7 | Runden- und Zeitsteuerung | ✅ Bereichslogik abgeschlossen | 60-s-Erinnerung, Gastgeberfreigabe ab 90 s, Ready- und Peek-Gates, Überfällige Spezialfähigkeit beenden, Zugtimer und Offline-Pause |
 | 8 | Vollständige Regeltests | ✅ Automatisierte Tests abgeschlossen | **96 automatische Regel- und Belastungstests**, 2–8-Spieler-Stresstests und isolierte Mehrclient-Simulationen in GitHub Actions erfolgreich; echte Browser-/Gerätetests folgen unter Bereich 9 |
-| 9 | Integration & Stabilität | 🟡 In Arbeit | Vollständige simulierte Spiele mit 2, 3, 4 und 8 Teilnehmern (einschließlich 3-Runden-Partie und Stichrunde), Wiederbeitritt, Hostübergabe, Snapshot-Schutz und Wiederherstellung erfolgreich; echte Browser-/Mehrgerätetests und PWA-Prüfung stehen noch aus |
+| 9 | Integration & Stabilität | 🟡 In Arbeit | Vollständige simulierte Spiele mit 2, 3, 4 und 8 Teilnehmern erfolgreich; zusätzlicher GitHub-Actions-Browsertest mit echtem Chromium (Desktop/Android-Emulation) und WebKit (iPhone-Emulation) eingerichtet: Bedienoberfläche, Manifest, Service Worker, lokaler Offline-Cache; **echte PeerJS/WebRTC-Geräteverbindungen und Installation auf physischen Smartphones sind weiterhin ungetestet** |
+
+## Paket 4 – Browser-/PWA-Prüfung in Arbeit
+
+Ein zusätzlicher GitHub-Actions-Workflow `.github/workflows/browser.yml` startet echte Playwright-Browser: Chromium Desktop, emuliertes Android-Viewport und WebKit mit emuliertem iPhone-Viewport. Er überprüft die tatsächliche Oberfläche, Raumerstellung, Manifest/Icons, Service-Worker-Aktivierung und die zwischengespeicherte App-Oberfläche bei simuliertem Netzwerkausfall. Der externe PeerJS-Signalisierungsdienst wird **in diesem Oberflächen-Browsertest durch einen lokalen Stub ersetzt**; die bisherigen Mehrclient-Tests haben ebenfalls keine reale WebRTC-Verbindung benutzt.
+
+Grenzen: WebKit unter Linux liefert beim Offline-Reload einen internen Fehler. Daher wird dort stattdessen der Inhalt des Offline-Cache direkt geprüft. Die echte iOS-Installation, Hintergrundbetrieb und tatsächlicher WebRTC-Spielbetrieb zwischen Smartphones können nur separat verifiziert werden.
 
 ## Automatisierte Vollpartien – Paket 3 abgeschlossen
 
