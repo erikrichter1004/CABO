@@ -50,12 +50,17 @@ class SimPeer {
 function client(identity,existingStorage=null){
  const app={innerHTML:""},dom=new Map();
  const timers=new Map();let nextTimer=0;
- const storage=existingStorage||new Map();
+ const storage=existingStorage||new Map(),session=new Map();
  const cryptoIds=[identity,"secret-token-"+identity+"-1234567890"];
  const ctx={
   console,Math,JSON,Date,structuredClone,Peer:SimPeer,
   crypto:{randomUUID:()=>cryptoIds.shift()||"backup-uuid-"+identity},
   sessionStorage:{
+   getItem:k=>session.get(k)??null,
+   setItem:(k,v)=>session.set(k,String(v)),
+   removeItem:k=>session.delete(k)
+  },
+  localStorage:{
    getItem:k=>storage.get(k)??null,
    setItem:(k,v)=>storage.set(k,String(v)),
    removeItem:k=>storage.delete(k)
@@ -184,6 +189,8 @@ async function main(){
  assert.equal(c.view().revision,b.view().revision);
  console.log("PASS voluntary host handoff preserves room, private pending draw and remaining guest connections");
  c.evaluate("closeNet()");await settle();
+ assert.equal(c.evaluate("localStorage.getItem('caboRoom')"),room);
+ assert.equal(c.evaluate("localStorage.getItem('caboIdentity')"),c.identity);
  const reloaded=client(c.identity,c.storage);
  assert.ok(reloaded.app.innerHTML.includes('id="rejoin"'));
  reloaded.evaluate('document.getElementById("rejoin").onclick()');await settle();
