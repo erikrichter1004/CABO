@@ -33,13 +33,17 @@ async function pageFor(engine,url,port){
 }
 async function exercise(hostEngine,guestEngine,name){
  console.log("Starting local PeerJS signaling for "+name);
- const signaling=PeerServer({port:0,path:"/cabo",key:"peerjs"});
- const begin=Date.now();
- while(!signaling.address?.()?.port){
-  if(Date.now()-begin>8000)throw Error("Local PeerServer failed to expose a listening port within eight seconds");
-  await new Promise(resolve=>setTimeout(resolve,80));
- }
- const port=signaling.address().port;
+ // PeerServer returns an Express application, not the listening HTTP server.
+ // The supplied callback receives the actual HTTP server once bound.
+ const signalingServer=await Promise.race([
+  new Promise((resolve,reject)=>{
+   try{PeerServer({port:0,host:"127.0.0.1",path:"/cabo",key:"peerjs"},resolve)}
+   catch(error){reject(error)}
+  }),
+  new Promise((_,reject)=>setTimeout(()=>reject(Error("PeerServer did not start within 10 seconds")),10000))
+ ]);
+ const port=signalingServer.address()?.port;
+ assert.ok(Number.isInteger(port)&&port>0,"PeerServer did not bind a valid port");
  console.log("Local signaling active on "+port);
  const server=webServer();
  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
@@ -97,7 +101,10 @@ async function exercise(hostEngine,guestEngine,name){
   if(guest){await guest.context.close().catch(()=>{});await guest.browser.close().catch(()=>{})}
   if(host){await host.context.close().catch(()=>{});await host.browser.close().catch(()=>{})}
   await new Promise(resolve=>server.close(resolve));
-  await Promise.resolve(signaling.close());
+  // Existing PeerJS WebSocket sessions should be closed with the browsers.
+  // Force-close remaining HTTP sockets so a failed test cannot hang GitHub CI.
+  signalingServer.closeAllConnections?.();
+  signalingServer.close();
  }
 }
 async function main(){
@@ -107,4 +114,4 @@ async function main(){
  await exercise(chromium,webkit,"Chromium ↔ WebKit");
  }finally{clearTimeout(guard)}
 }
-main().catch(error=>{console.error(error);process.exitCode=1});
+main().then(()=>process.exit(0)).catch(error=>{console.error(error);process.exit(1)});
