@@ -47,10 +47,10 @@ class SimPeer {
   for(const conn of this.connections)conn.close();
  }
 }
-function client(identity){
+function client(identity,existingStorage=null){
  const app={innerHTML:""},dom=new Map();
  const timers=new Map();let nextTimer=0;
- const storage=new Map();
+ const storage=existingStorage||new Map();
  const cryptoIds=[identity,"secret-token-"+identity+"-1234567890"];
  const ctx={
   console,Math,JSON,Date,structuredClone,Peer:SimPeer,
@@ -174,6 +174,14 @@ async function main(){
  assert.equal(c.evaluate("drawn"),null);
  assert.equal(c.view().revision,b.view().revision);
  console.log("PASS voluntary host handoff preserves room, private pending draw and remaining guest connections");
+ c.evaluate("closeNet()");await settle();
+ const reloaded=client(c.identity,c.storage);
+ assert.ok(reloaded.app.innerHTML.includes('id="rejoin"'));
+ reloaded.evaluate('document.getElementById("rejoin").onclick()');await settle();
+ assert.equal(reloaded.view().host,b.identity);
+ assert.equal(reloaded.view().revision,b.view().revision);
+ assert.equal(b.view().players.find(p=>p.id===c.identity).connected,true);
+ console.log("PASS reloaded guest reenters previous room without losing identity or score");
  console.log("PASS "+eventsSent+" simulated WebRTC messages exchanged");
 }
 async function recoveryScenario(){
